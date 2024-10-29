@@ -119,9 +119,6 @@ const editEmployee = async (req, res) => {
     }
 };
 
-// controllers/employeeController.js
-
-const Employee = require('../models/Employee');
 
 // Function to delete an Employee
 const deleteEmployee = async (req, res) => {
