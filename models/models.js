@@ -32,6 +32,7 @@ const teamLeaderSchema = new Schema({
     password: { type: String, required: true },
     admin: { type: Schema.Types.ObjectId, ref: 'Admin', required: true },
     employees: [{ type: Schema.Types.ObjectId, ref: 'Employee' }], // Array of Employees under the TeamLeader
+    tasks: [{ type: Schema.Types.ObjectId, ref: 'Task' }],
     // Other relevant fields
 }, { timestamps: true });
 
@@ -44,6 +45,7 @@ const employeeSchema = new Schema({
     password: { type: String, required: true },
     phone: { type: String }, // Optional phone field
     teamLeaders: [{ type: Schema.Types.ObjectId, ref: 'TeamLeader' }], // Array of TeamLeaders to whom the Employee reports
+    tasks: [{ type: Schema.Types.ObjectId, ref: 'Task' }],
     // Other relevant fields can be added here
 }, { timestamps: true });
 
@@ -57,13 +59,17 @@ const clientSchema = new Schema({
     companyName: { type: String, required: true },
     companyAddress: { type: String },
     contactNumber: { type: String },
+    status: {
+        type: String,
+        enum: ['Accepted', 'Requested', 'Rejected'],
+        default: 'Requested'
+    },
     teamLeader: { type: Schema.Types.ObjectId, ref: 'TeamLeader' }, // Connected Team Leader
     tasks: [{ type: Schema.Types.ObjectId, ref: 'Task' }], // Tasks assigned by this client
     // Other relevant fields
 }, { timestamps: true });
 
 const Client = mongoose.model('Client', clientSchema);
-
 
 // Task Schema
 const taskSchema = new Schema({
@@ -74,10 +80,21 @@ const taskSchema = new Schema({
         enum: ['Active', 'Work in Progress', 'Review', 'Resolved'],
         default: 'Active'
     },
-    client: { type: Schema.Types.ObjectId, ref: 'Client', required: true }, // The client who created the task
+    category: {
+        type: String,
+        enum: ['Frequency', 'Deadline'],
+        default: 'Frequency'
+    },
+    client: { type: Schema.Types.ObjectId, ref: 'Client' }, // The client who created the task
     teamLeader: { type: Schema.Types.ObjectId, ref: 'TeamLeader', required: true }, // Team Leader responsible for the task
-    assignedEmployees: [{ type: Schema.Types.ObjectId, ref: 'Employee' }], // Employees working on the task
-    completedBy: { type: Schema.Types.ObjectId, ref: 'Employee' }, // Optional: Employee who completed the task
+    assignedEmployees: [{
+        userType: { type: String, enum: ['Employee', 'TeamLeader'], required: true },
+        userId: { type: Schema.Types.ObjectId, required: true, refPath: 'assignedEmployees.userType' }
+    }], // Employees or Team Leaders working on the task
+    completedBy: {
+        userType: { type: String, enum: ['Employee', 'TeamLeader'], required: true },
+        userId: { type: Schema.Types.ObjectId, refPath: 'completedBy.userType' }
+    }, // Employee or Team Leader who completed the task
     dueDate: { type: Date },
     priority: { type: String, enum: ['Low', 'Medium', 'High'], default: 'Medium' },
     // Other relevant fields
@@ -86,11 +103,26 @@ const taskSchema = new Schema({
 const Task = mongoose.model('Task', taskSchema);
 
 
+const requestedTask = new Schema({
+    title: { type: String, required: true },
+    description: { type: String, required: true },
+    client: { type: Schema.Types.ObjectId, ref: 'Client' },
+    dueDate: { type: Date, required: true }, // New dueDate field
+    status: {
+        type: String,
+        enum: ['Accepted', 'Requested', 'Rejected'],
+        default: 'Requested'
+    }
+})
+
+const RequestTask = mongoose.model('RequestedTask', requestedTask);
+
 module.exports = {
     SuperAdmin,
     Admin,
     TeamLeader,
     Employee,
     Client,
-    Task
+    Task,
+    RequestTask
 };
