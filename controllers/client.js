@@ -47,6 +47,7 @@ const signupClient = async (req, res) => {
 };
 
 
+
 const loginClient = async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -204,10 +205,31 @@ const deleteClient = async (req, res) => {
     }
 };
 
+// Function to retrieve all clients
+const getAllClients = async (req, res) => {
+    try {
+        // Find all clients and populate the team leader information
+        const clients = await Client.find()
+            .populate('teamLeader', 'name email') // Populate team leader's name and email
+            .select('name email companyName companyAddress contactNumber gstNumber status teamLeader'); // Select necessary fields including gstNumber
+
+        res.status(200).json({
+            message: 'Clients retrieved successfully',
+            clients
+        });
+    } catch (error) {
+        console.error('Error retrieving clients:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+
+
 module.exports = {
     signupClient,
     loginClient,
     onboardClient,
     editClient,
-    deleteClient
+    deleteClient,
+    getAllClients
 };

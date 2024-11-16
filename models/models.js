@@ -59,14 +59,14 @@ const clientSchema = new Schema({
     companyName: { type: String, required: true },
     companyAddress: { type: String },
     contactNumber: { type: String },
+    gstNumber: { type: String }, // New GST Number attribute
     status: {
         type: String,
         enum: ['Accepted', 'Requested', 'Rejected'],
         default: 'Requested'
     },
-    teamLeader: { type: Schema.Types.ObjectId, ref: 'TeamLeader' }, // Connected Team Leader
-    tasks: [{ type: Schema.Types.ObjectId, ref: 'Task' }], // Tasks assigned by this client
-    // Other relevant fields
+    teamLeader: { type: Schema.Types.ObjectId, ref: 'TeamLeader' },
+    tasks: [{ type: Schema.Types.ObjectId, ref: 'Task' }],
 }, { timestamps: true });
 
 const Client = mongoose.model('Client', clientSchema);
