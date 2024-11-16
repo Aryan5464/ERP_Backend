@@ -87,7 +87,6 @@ const loginAdmin = async (req, res) => {
     }
 };
 
-
 // Function to edit an existing Admin
 const editAdmin = async (req, res) => {
     try {
@@ -150,11 +149,49 @@ const deleteAdmin = async (req, res) => {
     }
 };
 
+// Function to get the hierarchy from Admin -> TeamLeaders -> Employees
+const getAdminHierarchy = async (req, res) => {
+    try {
+        const { adminId } = req.body; // Get adminId from request body
+
+        // Check if adminId is provided
+        if (!adminId) {
+            return res.status(400).json({ message: 'Admin ID is required' });
+        }
+
+        // Find the admin by ID and populate their team leaders and their employees
+        const adminHierarchy = await Admin.findById(adminId)
+            .populate({
+                path: 'teamLeaders', // Populate teamLeaders under admin
+                populate: {
+                    path: 'employees', // Populate employees under each team leader
+                    select: 'name email' // Optional: Select specific fields of employees to return
+                },
+                select: 'name email' // Optional: Select specific fields of team leaders to return
+            })
+            .select('name email'); // Optional: Select specific fields of admin to return
+
+        // Check if admin exists
+        if (!adminHierarchy) {
+            return res.status(404).json({ message: 'Admin not found' });
+        }
+
+        res.status(200).json({
+            message: 'Admin hierarchy retrieved successfully',
+            adminHierarchy
+        });
+    } catch (error) {
+        console.error('Error retrieving admin hierarchy:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
 
 
 module.exports = {
     createAdmin,
     loginAdmin,
     editAdmin,
-    deleteAdmin
+    deleteAdmin,
+    getAdminHierarchy
 };

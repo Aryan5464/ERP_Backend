@@ -161,10 +161,46 @@ const deleteTeamLeader = async (req, res) => {
     }
 };
 
+const getTeamLeaderHierarchy = async (req, res) => {
+    try {
+        const { teamLeaderId } = req.body;
+
+        // Validate input
+        if (!teamLeaderId) {
+            return res.status(400).json({ message: 'Team Leader ID is required' });
+        }
+
+        // Find the team leader and populate the employees array
+        const teamLeader = await TeamLeader.findById(teamLeaderId)
+            .populate('employees', 'name email phone') // Populate employee details
+            .select('name email employees'); // Only select necessary fields for the response
+
+        // Check if the team leader was found
+        if (!teamLeader) {
+            return res.status(404).json({ message: 'Team Leader not found' });
+        }
+
+        res.status(200).json({
+            message: 'Team Leader hierarchy retrieved successfully',
+            teamLeader: {
+                id: teamLeader._id,
+                name: teamLeader.name,
+                email: teamLeader.email,
+                employees: teamLeader.employees
+            }
+        });
+    } catch (error) {
+        console.error('Error retrieving Team Leader hierarchy:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+
 
 module.exports = {
     createTeamLeader,
     loginTeamLeader,
     editTeamLeader,
-    deleteTeamLeader
+    deleteTeamLeader, 
+    getTeamLeaderHierarchy
 };

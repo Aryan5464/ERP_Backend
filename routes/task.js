@@ -3,21 +3,25 @@ const {
     requestTask,
     getRequestedTasksForTeamLeader,
     assignOrRejectRequestedTask,
-    deleteTask
+    deleteTask,
+    updateTaskStatus
 } = require('../controllers/task');
 
 const router = express.Router();
 
 // Route for a client to request a task
-router.post('/request', requestTask);
+router.post('/requestTask', requestTask); // for client
 
 // Route for a team leader to get all requested tasks from their clients
-router.get('/requested-tasks', getRequestedTasksForTeamLeader);
+router.get('/requested-tasks', getRequestedTasksForTeamLeader); // For Team Leader
 
 // Route for a team leader to accept or reject a requested task
-router.post('/assign-or-reject', assignOrRejectRequestedTask);
+router.post('/assign-or-reject', assignOrRejectRequestedTask); // For Team Leader
 
 // Route to delete a task (now with POST method and taskId in the body)
-router.post('/delete', deleteTask);
+router.delete('/delete', deleteTask); 
+
+// Route to update the status of a task
+router.put('/update-status', updateTaskStatus);  // Example: /task/update-status
 
 module.exports = router;

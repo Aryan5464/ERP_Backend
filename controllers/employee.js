@@ -1,6 +1,6 @@
 // controllers/employeeController.js
 
-const {Employee} = require('../models/models');
+const {Employee, TeamLeader} = require('../models/models');
 const { hashPassword, comparePasswords } = require('../utils/bcryptUtils');
 const { generateToken } = require('../utils/jwtUtils');
 
@@ -8,10 +8,10 @@ const { generateToken } = require('../utils/jwtUtils');
 const createEmployee = async (req, res) => {
     try {
         const { name, email, teamLeaderIds, phone } = req.body;
-        const password = 'mabicons123'
+        const password = 'mabicons123';
 
         // Validate input
-        if (!name || !email || !teamLeaderIds) {
+        if (!name || !email || !teamLeaderIds || !teamLeaderIds.length) {
             return res.status(400).json({ message: 'All required fields are not provided' });
         }
 
@@ -36,6 +36,12 @@ const createEmployee = async (req, res) => {
         // Save the Employee
         await newEmployee.save();
 
+        // Update each team leader to add this employee to their `employees` array
+        await TeamLeader.updateMany(
+            { _id: { $in: teamLeaderIds } },
+            { $push: { employees: newEmployee._id } }
+        );
+
         res.status(201).json({
             message: 'Employee created successfully',
             employee: {
@@ -49,6 +55,7 @@ const createEmployee = async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 };
+
 
 const loginEmployee = async (req, res) => {
     try {

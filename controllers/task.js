@@ -1,6 +1,5 @@
 const mongoose = require('mongoose');
-const { RequestedTask, Task, TeamLeader, Employee } = require('../models/models');
-
+const { RequestTask, Task, TeamLeader, Employee, Client } = require('../models/models');
 
 // Function for a client to request a task
 const requestTask = async (req, res) => {
@@ -13,7 +12,7 @@ const requestTask = async (req, res) => {
         }
 
         // Create new requested task
-        const newRequestTask = new RequestedTask({
+        const newRequestTask = new RequestTask({
             title,
             description,
             client: clientId,
@@ -49,9 +48,8 @@ const getRequestedTasksForTeamLeader = async (req, res) => {
         const clientIds = clients.map(client => client._id);
 
         // Find all requested tasks for the clients managed by this Team Leader
-        const requestedTasks = await RequestedTask.find({ client: { $in: clientIds } })
-            .populate('client', 'name email companyName contactNumber')  // Populate client details
-            .exec();
+        const requestedTasks = await RequestTask.find({ client: { $in: clientIds } })
+            .populate('client', 'name email companyName contactNumber');  // Populate client details
 
         res.status(200).json({
             message: 'Requested tasks retrieved successfully',
@@ -65,9 +63,6 @@ const getRequestedTasksForTeamLeader = async (req, res) => {
 
 
 const assignOrRejectRequestedTask = async (req, res) => {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
     try {
         const { requestedTaskId, teamLeaderId, action, assignedUserId, assignedUserType } = req.body;
 
@@ -77,7 +72,7 @@ const assignOrRejectRequestedTask = async (req, res) => {
         }
 
         // Find the requested task
-        const requestedTask = await RequestedTask.findById(requestedTaskId);
+        const requestedTask = await RequestTask.findById(requestedTaskId);
         if (!requestedTask) {
             return res.status(404).json({ message: 'Requested task not found' });
         }
@@ -104,56 +99,40 @@ const assignOrRejectRequestedTask = async (req, res) => {
                 priority: requestedTask.priority
             });
 
-            // Save the new task and get its ID
-            const savedTask = await newTask.save({ session });
-
-            // Update the status of the requested task to Accepted
+            // Save the new task and update the requested task status
+            await newTask.save();
             requestedTask.status = 'Accepted';
-            await requestedTask.save({ session });
+            await requestedTask.save();
 
             // Add the task ID to the Team Leader or Employee's tasks array
             if (assignedUserType === 'Employee') {
                 await Employee.findByIdAndUpdate(
                     assignedUserId,
-                    { $push: { tasks: savedTask._id } },
-                    { session }
+                    { $push: { tasks: newTask._id } }
                 );
             } else if (assignedUserType === 'TeamLeader') {
                 await TeamLeader.findByIdAndUpdate(
                     assignedUserId,
-                    { $push: { tasks: savedTask._id } },
-                    { session }
+                    { $push: { tasks: newTask._id } }
                 );
             }
 
-            // Commit the transaction
-            await session.commitTransaction();
-            session.endSession();
-
             res.status(201).json({
                 message: 'Task accepted and assigned successfully',
-                task: savedTask
+                task: newTask
             });
 
         } else if (action === 'reject') {
             // Update the status of the requested task to Rejected
             requestedTask.status = 'Rejected';
-            await requestedTask.save({ session });
-
-            // Commit the transaction for reject action
-            await session.commitTransaction();
-            session.endSession();
+            await requestedTask.save();
 
             res.status(200).json({ message: 'Task rejected successfully' });
         } else {
-            await session.abortTransaction();
-            session.endSession();
             res.status(400).json({ message: 'Invalid action. Use "accept" or "reject".' });
         }
 
     } catch (error) {
-        await session.abortTransaction();
-        session.endSession();
         console.error('Error processing task request:', error);
         res.status(500).json({ message: 'Server error' });
     }
@@ -162,7 +141,6 @@ const assignOrRejectRequestedTask = async (req, res) => {
 
 
 const deleteTask = async (req, res) => {
-    const session = await mongoose.startSession();
     try {
         const { taskId } = req.body;  // Get taskId from request body
 
@@ -170,46 +148,71 @@ const deleteTask = async (req, res) => {
             return res.status(400).json({ message: 'Task ID is required' });
         }
 
-        session.startTransaction();
-
         // Find the task to delete
-        const task = await Task.findById(taskId).session(session);
+        const task = await Task.findById(taskId);
         if (!task) {
             return res.status(404).json({ message: 'Task not found' });
         }
 
         // Remove the task from the Task collection
-        await Task.findByIdAndDelete(taskId).session(session);
+        await Task.findByIdAndDelete(taskId);
 
         // Update the Team Leader's task array by removing the task reference
         await TeamLeader.updateOne(
             { _id: task.teamLeader },
             { $pull: { tasks: taskId } }
-        ).session(session);
+        );
 
         // Update each Employee's task array by removing the task reference
         const assignedEmployees = task.assignedEmployees.map(employee => employee.userId);
         await Employee.updateMany(
             { _id: { $in: assignedEmployees } },
             { $pull: { tasks: taskId } }
-        ).session(session);
-
-        // Commit the transaction
-        await session.commitTransaction();
-        session.endSession();
+        );
 
         res.status(200).json({ message: 'Task deleted successfully' });
     } catch (error) {
-        await session.abortTransaction();
-        session.endSession();
         console.error('Error deleting task:', error);
         res.status(500).json({ message: 'Server error' });
     }
 };
 
+// Function to update the status of a task
+const updateTaskStatus = async (req, res) => {
+    try {
+        const { taskId, status } = req.body;
+
+        // Validate required fields
+        if (!taskId || !status) {
+            return res.status(400).json({ message: 'Task ID and status are required.' });
+        }
+
+        // Update the task status
+        const updatedTask = await Task.findByIdAndUpdate(
+            taskId,
+            { status },
+            { new: true }  // Returns the updated document
+        );
+
+        if (!updatedTask) {
+            return res.status(404).json({ message: 'Task not found' });
+        }
+
+        res.status(200).json({
+            message: 'Task status updated successfully',
+            task: updatedTask
+        });
+    } catch (error) {
+        console.error('Error updating task status:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+
 module.exports = {
     requestTask,
     getRequestedTasksForTeamLeader,
     assignOrRejectRequestedTask,
-    deleteTask
+    deleteTask,
+    updateTaskStatus
 };

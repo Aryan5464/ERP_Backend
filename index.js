@@ -14,6 +14,7 @@ const TLroutes = require('./routes/teamLeader')
 const employeeRoutes = require('./routes/employee');
 const seedSuperAdmin = require('./db/seedSuperAdmin');
 const clientRoutes = require('./routes/client')
+const taskRoutes = require('./routes/task')
 
 
 app.get('/', (req, res) => {
@@ -22,9 +23,10 @@ app.get('/', (req, res) => {
 
 app.use('/superAdmin', superAdminRoute);
 app.use('/admin', adminRoute);
-app.use('/teamLeader', TLroutes);
+app.use('/teamLeader', TLroutes); 
 app.use('/employee', employeeRoutes);
 app.use('/client', clientRoutes);
+app.use('/task', taskRoutes);
 
 seedSuperAdmin();
 

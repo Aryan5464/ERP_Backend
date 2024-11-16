@@ -92,7 +92,7 @@ const taskSchema = new Schema({
         userId: { type: Schema.Types.ObjectId, required: true, refPath: 'assignedEmployees.userType' }
     }], // Employees or Team Leaders working on the task
     completedBy: {
-        userType: { type: String, enum: ['Employee', 'TeamLeader'], required: true },
+        userType: { type: String, enum: ['Employee', 'TeamLeader'] },
         userId: { type: Schema.Types.ObjectId, refPath: 'completedBy.userType' }
     }, // Employee or Team Leader who completed the task
     dueDate: { type: Date },
@@ -108,14 +108,26 @@ const requestedTask = new Schema({
     description: { type: String, required: true },
     client: { type: Schema.Types.ObjectId, ref: 'Client' },
     dueDate: { type: Date, required: true }, // New dueDate field
+    priority: { type: String, enum: ['Low', 'Medium', 'High'], default: 'Medium' },
     status: {
         type: String,
         enum: ['Accepted', 'Requested', 'Rejected'],
         default: 'Requested'
     }
-})
+}, { timestamps: true })
 
 const RequestTask = mongoose.model('RequestedTask', requestedTask);
+
+
+const notificationSchema = new Schema({
+    recipient: { type: Schema.Types.ObjectId, refPath: 'recipientType', required: true }, 
+    recipientType: { type: String, enum: ['SuperAdmin', 'Admin', 'TeamLeader', 'Employee', 'Client'], required: true },
+    title: { type: String, required: true },
+    message: { type: String, required: true },
+    isRead: { type: Boolean, default: false },
+    readAt: { type: Date } // Date when the notification was read (if applicable)
+}, { timestamps: true }); // Automatically includes createdAt and updatedAt
+const Notification = mongoose.model('Notification', notificationSchema);
 
 module.exports = {
     SuperAdmin,
@@ -124,5 +136,22 @@ module.exports = {
     Employee,
     Client,
     Task,
-    RequestTask
+    RequestTask,
+    Notification
 };
+
+ 
+
+
+
+////////////////////// attributes that can be added to to the Notification Schema
+    // actionRequired: { type: Boolean, default: false }, // Indicates if an action is required from the recipient
+    // relatedTask: { type: Schema.Types.ObjectId, ref: 'Task' }, // Optional: Reference to the related task
+    // relatedClient: { type: Schema.Types.ObjectId, ref: 'Client' }, // Optional: Reference to the related client
+    // sender: { type: Schema.Types.ObjectId, refPath: 'senderType' }, // Optional: sender of the notification
+    // senderType: { type: String, enum: ['SuperAdmin', 'Admin', 'TeamLeader', 'Employee', 'Client'] }, // Specifies the model for the sender
+    // type: { 
+    //     type: String, 
+    //     enum: ['TaskAssignment', 'TaskUpdate', 'ClientRequest', 'ClientApproval', 'Reminder', 'General'],
+    //     required: true 
+    // }, // Type of notification

@@ -4,33 +4,29 @@ const { generateToken } = require('../utils/jwtUtils');
 
 const signupClient = async (req, res) => {
     try {
-        const { name, email, password, companyName, companyAddress, contactNumber } = req.body;
+        const { name, email, password, companyName, companyAddress, contactNumber, gstNumber } = req.body;
 
-        // Check if all required fields are present
         if (!name || !email || !password || !companyName) {
             return res.status(400).json({ message: 'All required fields must be filled out.' });
         }
 
-        // Check if the email is already taken by another Client
         const existingClient = await Client.findOne({ email });
         if (existingClient) {
             return res.status(409).json({ message: 'Email already in use' });
         }
 
-        // Hash the password before saving
         const hashedPassword = await hashPassword(password);
 
-        // Create the new Client
         const client = new Client({
             name,
             email,
             password: hashedPassword,
             companyName,
             companyAddress,
-            contactNumber
+            contactNumber,
+            gstNumber // New field
         });
 
-        // Save the Client to the database
         await client.save();
 
         res.status(201).json({
@@ -40,7 +36,8 @@ const signupClient = async (req, res) => {
                 name: client.name,
                 email: client.email,
                 companyName: client.companyName,
-                status: client.status // Should be 'Requested' by default
+                status: client.status,
+                gstNumber: client.gstNumber
             }
         });
     } catch (error) {
@@ -144,30 +141,26 @@ const onboardClient = async (req, res) => {
 
 const editClient = async (req, res) => {
     try {
-        const { clientId, name, password, companyName, companyAddress, contactNumber } = req.body;
+        const { clientId, name, password, companyName, companyAddress, contactNumber, gstNumber } = req.body;
 
-        // Validate client ID
         if (!clientId) {
             return res.status(400).json({ message: 'Client ID is required' });
         }
 
-        // Find the client by ID
         const client = await Client.findById(clientId);
         if (!client) {
             return res.status(404).json({ message: 'Client not found' });
         }
 
-        // Update only the allowed fields
         if (name) client.name = name;
         if (companyName) client.companyName = companyName;
         if (companyAddress) client.companyAddress = companyAddress;
         if (contactNumber) client.contactNumber = contactNumber;
+        if (gstNumber) client.gstNumber = gstNumber; // New field
         if (password) {
-            // Hash the new password before saving
             client.password = await hashPassword(password);
         }
 
-        // Save the updated client information
         await client.save();
 
         res.status(200).json({
@@ -175,10 +168,11 @@ const editClient = async (req, res) => {
             client: {
                 id: client._id,
                 name: client.name,
-                email: client.email,  // Email remains unchanged
+                email: client.email,
                 companyName: client.companyName,
                 companyAddress: client.companyAddress,
-                contactNumber: client.contactNumber
+                contactNumber: client.contactNumber,
+                gstNumber: client.gstNumber // New field
             }
         });
     } catch (error) {
@@ -209,8 +203,6 @@ const deleteClient = async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 };
-
-
 
 module.exports = {
     signupClient,
