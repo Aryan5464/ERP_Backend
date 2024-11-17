@@ -129,6 +129,7 @@ const notificationSchema = new Schema({
 }, { timestamps: true }); // Automatically includes createdAt and updatedAt
 const Notification = mongoose.model('Notification', notificationSchema);
 
+
 module.exports = {
     SuperAdmin,
     Admin,

@@ -1,6 +1,6 @@
 // controllers/employeeController.js
 
-const {Employee, TeamLeader} = require('../models/models');
+const {Employee, TeamLeader, Task} = require('../models/models');
 const { hashPassword, comparePasswords } = require('../utils/bcryptUtils');
 const { generateToken } = require('../utils/jwtUtils');
 
@@ -130,25 +130,61 @@ const editEmployee = async (req, res) => {
 // Function to delete an Employee
 const deleteEmployee = async (req, res) => {
     try {
-        const { employeeID } = req.body;
+        const { employeeId } = req.body;
 
-        if (!employeeID) {
+        if (!employeeId) {
             return res.status(400).json({ message: 'Employee ID is required' });
         }
 
-        const employee = await Employee.findById(employeeID);
+        // Find the employee to delete
+        const employee = await Employee.findById(employeeId);
         if (!employee) {
             return res.status(404).json({ message: 'Employee not found' });
         }
 
-        await Employee.findByIdAndDelete(employeeID);
+        // Remove the employee from their team leaders' employee lists
+        await TeamLeader.updateMany(
+            { employees: employeeId },
+            { $pull: { employees: employeeId } }
+        );
+
+        // Delete the employee from the database
+        await Employee.findByIdAndDelete(employeeId);
 
         res.status(200).json({ message: 'Employee deleted successfully' });
     } catch (error) {
-        console.error('Error deleting Employee:', error);
+        console.error('Error deleting employee:', error);
         res.status(500).json({ message: 'Server error' });
     }
 };
+
+// controllers/taskController.js
+const getEmployeeTasks = async (req, res) => {
+    try {
+        const { employeeId } = req.body;
+
+        // Check if the employee exists
+        const employee = await Employee.findById(employeeId);
+        if (!employee) {
+            return res.status(404).json({ message: 'Employee not found' });
+        }
+
+        // Fetch tasks where the employee is assigned
+        const tasks = await Task.find({
+            "assignedEmployees.userType": "Employee",
+            "assignedEmployees.userId": employeeId
+        }).populate('client', 'name').populate('assignedEmployees.userId', 'name');
+
+        res.status(200).json({
+            message: 'Tasks fetched successfully',
+            tasks
+        });
+    } catch (error) {
+        console.error('Error fetching tasks for employee:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
 
 const promoteEmployeeToTeamLeader = async (req, res) => {
     const session = await mongoose.startSession();
@@ -206,5 +242,6 @@ module.exports = {
     loginEmployee,
     editEmployee,
     deleteEmployee,
+    getEmployeeTasks,
     promoteEmployeeToTeamLeader
 };

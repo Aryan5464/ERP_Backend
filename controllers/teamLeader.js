@@ -1,6 +1,6 @@
 // controllers/teamLeaderController.js
 
-const {TeamLeader} = require('../models/models');
+const {TeamLeader, Task} = require('../models/models');
 const {Admin} = require('../models/models');
 const { hashPassword, comparePasswords } = require('../utils/bcryptUtils');
 const { generateToken } = require('../utils/jwtUtils');
@@ -139,27 +139,43 @@ const editTeamLeader = async (req, res) => {
     }
 };
 
+
 const deleteTeamLeader = async (req, res) => {
     try {
-        const { TlID } = req.body;
+        const { teamLeaderId } = req.body;
 
-        if (!TlID) {
+        if (!teamLeaderId) {
             return res.status(400).json({ message: 'Team Leader ID is required' });
         }
 
-        const teamLeader = await TeamLeader.findById(TlID);
+        // Find the team leader to delete
+        const teamLeader = await TeamLeader.findById(teamLeaderId);
         if (!teamLeader) {
             return res.status(404).json({ message: 'Team Leader not found' });
         }
 
-        await TeamLeader.findByIdAndDelete(TlID);
+        // Remove the team leader from their admin's team leaders list
+        await Admin.updateOne(
+            { teamLeaders: teamLeaderId },
+            { $pull: { teamLeaders: teamLeaderId } }
+        );
+
+        // Unassign the team leader from any employees they manage
+        await Employee.updateMany(
+            { teamLeaders: teamLeaderId },
+            { $pull: { teamLeaders: teamLeaderId } }
+        );
+
+        // Delete the team leader from the database
+        await TeamLeader.findByIdAndDelete(teamLeaderId);
 
         res.status(200).json({ message: 'Team Leader deleted successfully' });
     } catch (error) {
-        console.error('Error deleting Team Leader:', error);
+        console.error('Error deleting team leader:', error);
         res.status(500).json({ message: 'Server error' });
     }
 };
+
 
 const getTeamLeaderHierarchy = async (req, res) => {
     try {
@@ -196,11 +212,40 @@ const getTeamLeaderHierarchy = async (req, res) => {
 };
 
 
+const getTeamLeaderTasks = async (req, res) => {
+    try {
+        const { teamLeaderId } = req.body;
+
+        // Check if the team leader exists
+        const teamLeader = await TeamLeader.findById(teamLeaderId);
+        if (!teamLeader) {
+            return res.status(404).json({ message: 'Team Leader not found' });
+        }
+
+        // Fetch tasks where the team leader is directly responsible or assigned
+        const tasks = await Task.find({
+            $or: [
+                { teamLeader: teamLeaderId },
+                { "assignedEmployees.userType": "TeamLeader", "assignedEmployees.userId": teamLeaderId }
+            ]
+        }).populate('client', 'name').populate('assignedEmployees.userId', 'name');
+
+        res.status(200).json({
+            message: 'Tasks fetched successfully',
+            tasks
+        });
+    } catch (error) {
+        console.error('Error fetching tasks for team leader:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
 
 module.exports = {
     createTeamLeader,
     loginTeamLeader,
     editTeamLeader,
     deleteTeamLeader, 
-    getTeamLeaderHierarchy
+    getTeamLeaderHierarchy, 
+    getTeamLeaderTasks
 };
