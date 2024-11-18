@@ -19,7 +19,7 @@ const adminSchema = new Schema({
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
     teamLeaders: [{ type: Schema.Types.ObjectId, ref: 'TeamLeader' }], // Array of TeamLeaders under the Admin
-    employees: [{ type: Schema.Types.ObjectId, ref: 'Employee' }], // Array of Employees directly managed by the Admin
+    // employees: [{ type: Schema.Types.ObjectId, ref: 'Employee' }], // Array of Employees directly managed by the Admin
 
 }, { timestamps: true });
 

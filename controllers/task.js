@@ -117,6 +117,12 @@ const assignOrRejectRequestedTask = async (req, res) => {
                 );
             }
 
+            // Add the task ID to the Client's tasks array
+            await Client.findByIdAndUpdate(
+                requestedTask.client,
+                { $push: { tasks: newTask._id } }
+            );
+
             res.status(201).json({
                 message: 'Task accepted and assigned successfully',
                 task: newTask
@@ -208,11 +214,37 @@ const updateTaskStatus = async (req, res) => {
     }
 };
 
+// Get all tasks
+const getAllTasks = async (req, res) => {
+    try {
+        // Fetch all tasks from the database
+        const tasks = await Task.find()
+            .populate('client')   // Populate client details if needed
+            .populate('teamLeader')  // Populate team leader details if needed
+            .populate('assignedEmployees.userId')  // Populate assigned employee details if needed
+            .populate('completedBy.userId');  // Populate completedBy details if needed
+
+        if (!tasks || tasks.length === 0) {
+            return res.status(404).json({ message: 'No tasks found' });
+        }
+
+        // Return the tasks to the admin
+        res.status(200).json({
+            message: 'All tasks fetched successfully',
+            tasks: tasks,
+        });
+    } catch (error) {
+        console.error('Error fetching tasks:', error);
+        res.status(500).json({ message: 'Server error while fetching tasks' });
+    }
+};
+
 
 module.exports = {
     requestTask,
     getRequestedTasksForTeamLeader,
     assignOrRejectRequestedTask,
     deleteTask,
-    updateTaskStatus
+    updateTaskStatus,
+    getAllTasks
 };
