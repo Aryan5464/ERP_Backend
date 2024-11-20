@@ -6,7 +6,7 @@ const signupClient = async (req, res) => {
     try {
         const { name, email, password, companyName, companyAddress, contactNumber, gstNumber } = req.body;
 
-        if (!name || !email || !password || !companyName) {
+        if (!name || !email || !password || !companyName || !companyAddress || !contactNumber || !gstNumber) {
             return res.status(400).json({ message: 'All required fields must be filled out.' });
         }
 
@@ -45,7 +45,6 @@ const signupClient = async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 };
-
 
 
 const loginClient = async (req, res) => {
@@ -105,7 +104,6 @@ const onboardClient = async (req, res) => {
             return res.status(404).json({ message: 'Client not found or already processed' });
         }
 
-        // Process action
         if (action === 'Accepted') {
             // Ensure teamLeaderId is provided for accepted requests
             if (!teamLeaderId) {
@@ -115,13 +113,27 @@ const onboardClient = async (req, res) => {
             // Update the client status to 'Accepted' and connect to the Team Leader
             client.status = 'Accepted';
             client.teamLeader = teamLeaderId;
+
+            // Save the updated client information
+            await client.save();
+
+            // Add the client ID to the Team Leader's clients array
+            const updateResult = await TeamLeader.findByIdAndUpdate(
+                teamLeaderId,
+                { $addToSet: { clients: clientId } }, // Use $addToSet to prevent duplicates
+                { new: true }
+            );
+
+            if (!updateResult) {
+                return res.status(404).json({ message: 'Team Leader not found' });
+            }
         } else {
             // Update the client status to 'Rejected'
             client.status = 'Rejected';
-        }
 
-        // Save the updated client information
-        await client.save();
+            // Save the updated client information
+            await client.save();
+        }
 
         res.status(200).json({
             message: `Client ${action.toLowerCase()} successfully`,
@@ -130,7 +142,7 @@ const onboardClient = async (req, res) => {
                 name: client.name,
                 email: client.email,
                 status: client.status,
-                teamLeader: client.teamLeader
+                teamLeader: client.teamLeader || null
             }
         });
     } catch (error) {
@@ -138,6 +150,7 @@ const onboardClient = async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 };
+
 
 
 const editClient = async (req, res) => {
@@ -223,6 +236,37 @@ const getAllClients = async (req, res) => {
     }
 };
 
+const getClientsForTeamLeader = async (req, res) => {
+    try {
+        const { teamLeaderId } = req.body;
+
+        // Validate the input
+        if (!teamLeaderId) {
+            return res.status(400).json({ message: 'Team Leader ID is required.' });
+        }
+
+        // Fetch clients associated with the team leader and with status 'Accepted'
+        const clients = await Client.find({ 
+            teamLeader: teamLeaderId, 
+            status: 'Accepted' 
+        });
+
+        // Check if no clients are found
+        if (!clients || clients.length === 0) {
+            return res.status(404).json({ message: 'No clients found for this team leader.' });
+        }
+
+        // Return the list of clients
+        res.status(200).json({
+            message: 'Clients fetched successfully',
+            clients
+        });
+    } catch (error) {
+        console.error('Error fetching clients:', error);
+        res.status(500).json({ message: 'Server error while fetching clients' });
+    }
+};
+
 
 
 module.exports = {
@@ -231,5 +275,6 @@ module.exports = {
     onboardClient,
     editClient,
     deleteClient,
-    getAllClients
+    getAllClients,
+    getClientsForTeamLeader
 };

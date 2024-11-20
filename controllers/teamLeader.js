@@ -167,56 +167,77 @@ const deleteTeamLeaderWithReassignment = async (req, res) => {
             return res.status(404).json({ message: 'New Team Leader not found' });
         }
 
-        // Step 1: Remove the old team leader from each employee's teamLeaders array
+        // Step 1: Transfer employees
+        const employeesToTransfer = teamLeaderToDelete.employees;
+
+        // Remove old team leader from employees
         await Employee.updateMany(
             { teamLeaders: teamLeaderId },
             { $pull: { teamLeaders: teamLeaderId } }
         );
 
-        // Step 2: Add the new team leader to each relevant employee's teamLeaders array
-        await Employee.updateMany(
-            { teamLeaders: { $ne: newTeamLeaderId }, _id: { $in: teamLeaderToDelete.employees } },
-            { $addToSet: { teamLeaders: newTeamLeaderId } }
-        );
+        // Add new team leader to employees
+        if (employeesToTransfer.length > 0) {
+            await Employee.updateMany(
+                { _id: { $in: employeesToTransfer }, teamLeaders: { $ne: newTeamLeaderId } },
+                { $addToSet: { teamLeaders: newTeamLeaderId } }
+            );
+        }
 
-        // Step 3: Update the employees array in the new team leader
-        const employeesToTransfer = teamLeaderToDelete.employees;
+        // Update employees array in the new team leader
         await TeamLeader.findByIdAndUpdate(newTeamLeaderId, {
             $addToSet: { employees: { $each: employeesToTransfer } }
         });
 
-        // Step 4: Reassign tasks to the new team leader and update the tasks array of the new team leader
+        // Step 2: Transfer tasks
         const tasksToTransfer = await Task.find({ teamLeader: teamLeaderId });
-        
-        // Set the new team leader on each of the tasks and save
+        const taskIds = tasksToTransfer.map(task => task._id);
+
+        // Update tasks to new team leader
         await Task.updateMany(
             { teamLeader: teamLeaderId },
             { $set: { teamLeader: newTeamLeaderId } }
         );
 
-        // Add these tasks to the tasks array in new team leader
-        const taskIds = tasksToTransfer.map(task => task._id);
+        // Add tasks to the new team leader's task array
         await TeamLeader.findByIdAndUpdate(newTeamLeaderId, {
             $addToSet: { tasks: { $each: taskIds } }
         });
 
-        // Step 5: Update tasks where the deleted team leader was an assigned employee
+        // Update tasks where the deleted team leader was assigned as an employee
         await Task.updateMany(
             { "assignedEmployees.userType": "TeamLeader", "assignedEmployees.userId": teamLeaderId },
             { $set: { "assignedEmployees.$[elem].userId": newTeamLeaderId } },
             { arrayFilters: [{ "elem.userId": teamLeaderId }] }
         );
 
-        // Step 6: Reassign clients to the new team leader
-        await Client.updateMany(
-            { teamLeader: teamLeaderId },
-            { $set: { teamLeader: newTeamLeaderId } }
-        );
+        // Step 3: Transfer clients
+        const clientsToTransfer = await Client.find({ teamLeader: teamLeaderId });
+        const clientIds = clientsToTransfer.map(client => client._id);
 
-        // Step 7: Delete the old team leader
+        if (clientIds.length > 0) {
+            await Client.updateMany(
+                { _id: { $in: clientIds } },
+                { $set: { teamLeader: newTeamLeaderId } }
+            );
+        }
+
+        // Update clients array in the new team leader
+        await TeamLeader.findByIdAndUpdate(newTeamLeaderId, {
+            $addToSet: { clients: { $each: clientIds } }
+        });
+
+        // Step 4: Clean up team leader to delete
         await TeamLeader.findByIdAndDelete(teamLeaderId);
 
-        res.status(200).json({ message: 'Team Leader deleted and employees, clients, and tasks reassigned successfully' });
+        res.status(200).json({ 
+            message: 'Team Leader deleted and reassigned successfully', 
+            reassigned: {
+                employees: employeesToTransfer,
+                tasks: taskIds,
+                clients: clientIds
+            }
+        });
     } catch (error) {
         console.error('Error deleting team leader:', error);
         res.status(500).json({ message: 'Server error' });

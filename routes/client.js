@@ -1,6 +1,6 @@
 const express = require('express');
 const verifyAuthToken = require('../middleware/authMiddleware');
-const { onboardClient, signupClient, loginClient, editClient, deleteClient, getAllClients } = require('../controllers/client');
+const { onboardClient, signupClient, loginClient, editClient, deleteClient, getAllClients, getClientsForTeamLeader } = require('../controllers/client');
 const router = express.Router();
 
 // Client signup route
@@ -20,6 +20,6 @@ router.delete('/delete', verifyAuthToken, deleteClient);
 
 router.get('/all', getAllClients);
 
-
+router.get('/clients', getClientsForTeamLeader);
 
 module.exports = router;

@@ -33,6 +33,7 @@ const teamLeaderSchema = new Schema({
     admin: { type: Schema.Types.ObjectId, ref: 'Admin', required: true },
     employees: [{ type: Schema.Types.ObjectId, ref: 'Employee' }], // Array of Employees under the TeamLeader
     tasks: [{ type: Schema.Types.ObjectId, ref: 'Task' }],
+    clients: [{type: Schema.Types.ObjectId, ref: 'Client'}]
     // Other relevant fields
 }, { timestamps: true });
 

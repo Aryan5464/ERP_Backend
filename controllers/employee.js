@@ -186,62 +186,10 @@ const getEmployeeTasks = async (req, res) => {
 };
 
 
-const promoteEmployeeToTeamLeader = async (req, res) => {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
-    try {
-        const { employeeId, adminId } = req.body;
-
-        if (!employeeId || !adminId) {
-            return res.status(400).json({ message: 'Employee ID and Admin ID are required' });
-        }
-
-        const employee = await Employee.findById(employeeId);
-        if (!employee) {
-            return res.status(404).json({ message: 'Employee not found' });
-        }
-
-        const teamLeaderData = {
-            name: employee.name,
-            email: employee.email,
-            password: employee.password,
-            admin: adminId,
-            employees: [], // Initialize with an empty array, can be modified later
-            phone: employee.phone || null, // Include phone if it exists in Employee
-        };
-
-        // Create new Team Leader from Employee data
-        const newTeamLeader = new TeamLeader(teamLeaderData);
-        await newTeamLeader.save({ session });
-
-        // Delete the Employee after successful Team Leader creation
-        await Employee.findByIdAndDelete(employeeId, { session });
-
-        // Commit the transaction
-        await session.commitTransaction();
-        session.endSession();
-
-        res.status(201).json({
-            message: 'Employee promoted to Team Leader successfully',
-            teamLeader: newTeamLeader,
-        });
-    } catch (error) {
-        // Abort transaction on any error
-        await session.abortTransaction();
-        session.endSession();
-
-        console.error('Error promoting Employee to Team Leader:', error);
-        res.status(500).json({ message: 'Failed to promote Employee to Team Leader' });
-    }
-};
-
-
 module.exports = {
     createEmployee,
     loginEmployee,
     editEmployee,
     deleteEmployee,
-    getEmployeeTasks,
-    promoteEmployeeToTeamLeader
+    getEmployeeTasks
 };

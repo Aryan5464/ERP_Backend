@@ -1,5 +1,5 @@
 const express = require('express');
-const { createTeamLeader, editTeamLeader, loginTeamLeader, deleteTeamLeader, getTeamLeaderHierarchy, getTeamLeaderTasks, deleteTeamLeaderWithReassignment, deleteTeamLeaderAndPromoteEmployee } = require('../controllers/teamLeader'); // Import the controller functions
+const { createTeamLeader, editTeamLeader, loginTeamLeader, getTeamLeaderHierarchy, getTeamLeaderTasks, deleteTeamLeaderWithReassignment, deleteTeamLeaderAndPromoteEmployee } = require('../controllers/teamLeader'); // Import the controller functions
 const verifyAuthToken = require('../middleware/authMiddleware'); // Import the auth middleware
 
 const router = express.Router();

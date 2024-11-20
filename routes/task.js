@@ -5,7 +5,8 @@ const {
     assignOrRejectRequestedTask,
     deleteTask,
     updateTaskStatus,
-    getAllTasks
+    getAllTasks,
+    createTaskForEmployeeByTL
 } = require('../controllers/task');
 
 const router = express.Router();
@@ -26,5 +27,7 @@ router.delete('/delete', deleteTask);
 router.put('/update-status', updateTaskStatus);  // Example: /task/update-status
 
 router.get('/allTasks', getAllTasks);
+
+router.post('/createTaskForEmployeeByTL', createTaskForEmployeeByTL)
 
 module.exports = router;

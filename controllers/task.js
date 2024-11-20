@@ -144,44 +144,127 @@ const assignOrRejectRequestedTask = async (req, res) => {
     }
 };
 
+const createTaskForEmployeeByTL = async (req, res) => {
+    try {
+        const { title, description, assignedEmployeeID, dueDate, priority, clientId, teamLeaderId } = req.body;
+
+        // Validate required fields
+        if (!title || !description || !assignedEmployeeID || !teamLeaderId) {
+            return res.status(400).json({ 
+                message: 'Title, description, assigned user ID, and team leader ID are required.' 
+            });
+        }
+
+        // Prepare the new task data
+        const newTaskData = {
+            title,
+            description,
+            status: 'Active',
+            priority,
+            dueDate,
+            teamLeader: teamLeaderId,
+            assignedEmployees: [{
+                userType: 'Employee',
+                userId: assignedEmployeeID
+            }]
+        };
+
+        // If clientId is provided, associate the task with the client
+        if (clientId) {
+            const client = await Client.findById(clientId);
+            if (!client) {
+                return res.status(404).json({ message: 'Client not found.' });
+            }
+            newTaskData.client = clientId;
+        }
+
+        // Create and save the new task
+        const newTask = new Task(newTaskData);
+        await newTask.save();
+
+        // Add the task to the employee's tasks array
+        await Employee.findByIdAndUpdate(
+            assignedEmployeeID,
+            { $push: { tasks: newTask._id } }
+        );
+
+        // Add the task to the team's tasks array (for the Team Leader)
+        await TeamLeader.findByIdAndUpdate(
+            teamLeaderId,
+            { $push: { tasks: newTask._id } }
+        );
+
+        // If the task is associated with a client, add the task to the client's tasks array
+        if (clientId) {
+            await Client.findByIdAndUpdate(
+                clientId,
+                { $push: { tasks: newTask._id } }
+            );
+        }
+
+        res.status(201).json({
+            message: 'Task created and assigned successfully',
+            task: newTask
+        });
+
+    } catch (error) {
+        console.error('Error creating task for employee:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
 
 
 const deleteTask = async (req, res) => {
     try {
-        const { taskId } = req.body;  // Get taskId from request body
+        const { taskId } = req.body;
 
+        // Validate the task ID
         if (!taskId) {
-            return res.status(400).json({ message: 'Task ID is required' });
+            return res.status(400).json({ message: 'Task ID is required.' });
         }
 
-        // Find the task to delete
+        // Find the task by ID
         const task = await Task.findById(taskId);
         if (!task) {
-            return res.status(404).json({ message: 'Task not found' });
+            return res.status(404).json({ message: 'Task not found.' });
         }
 
-        // Remove the task from the Task collection
+        // Remove the task ID from the associated team leader's tasks array
+        await TeamLeader.findByIdAndUpdate(
+            task.teamLeader,
+            { $pull: { tasks: taskId } }
+        );
+
+        // Remove the task ID from the assigned employees' tasks arrays
+        if (task.assignedEmployees && task.assignedEmployees.length > 0) {
+            const employeeIds = task.assignedEmployees
+                .filter(emp => emp.userType === 'Employee')
+                .map(emp => emp.userId);
+
+            await Employee.updateMany(
+                { _id: { $in: employeeIds } },
+                { $pull: { tasks: taskId } }
+            );
+        }
+
+        // Remove the task ID from the associated client's tasks array (if a client is linked)
+        if (task.client) {
+            await Client.findByIdAndUpdate(
+                task.client,
+                { $pull: { tasks: taskId } }
+            );
+        }
+
+        // Delete the task from the database
         await Task.findByIdAndDelete(taskId);
 
-        // Update the Team Leader's task array by removing the task reference
-        await TeamLeader.updateOne(
-            { _id: task.teamLeader },
-            { $pull: { tasks: taskId } }
-        );
-
-        // Update each Employee's task array by removing the task reference
-        const assignedEmployees = task.assignedEmployees.map(employee => employee.userId);
-        await Employee.updateMany(
-            { _id: { $in: assignedEmployees } },
-            { $pull: { tasks: taskId } }
-        );
-
-        res.status(200).json({ message: 'Task deleted successfully' });
+        res.status(200).json({ message: 'Task deleted successfully.' });
     } catch (error) {
         console.error('Error deleting task:', error);
-        res.status(500).json({ message: 'Server error' });
+        res.status(500).json({ message: 'Server error.' });
     }
 };
+
 
 // Function to update the status of a task
 const updateTaskStatus = async (req, res) => {
@@ -246,5 +329,6 @@ module.exports = {
     assignOrRejectRequestedTask,
     deleteTask,
     updateTaskStatus,
-    getAllTasks
+    getAllTasks,
+    createTaskForEmployeeByTL
 };
