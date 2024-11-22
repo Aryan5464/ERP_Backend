@@ -71,9 +71,50 @@ const getFileLink = async (fileId) => {
 };
 
 
+const uploadFileToDrive = async (folderId, file) => {
+  const fileMetadata = {
+      name: file.originalFilename, // Name of the file as it will appear in Google Drive
+      parents: [folderId],         // Parent folder ID for organization
+  };
+
+
+  const media = {
+      mimeType: file.mimetype,     // File MIME type (e.g., application/pdf)
+      body: fs.createReadStream(file.filepath), // File data as a stream
+  };
+
+  const response = await drive.files.create({
+      resource: fileMetadata,
+      media,                      // Media content to upload
+      fields: "id",               // Only return the file ID
+  });
+
+  return response.data.id;      // Return the uploaded file's ID
+};
+
+
+const createFolder = async (name, parentFolderId = null) => {
+  const fileMetadata = {
+      name,                       // Folder name
+      mimeType: "application/vnd.google-apps.folder", // MIME type for Google Drive folders
+  };
+
+  if (parentFolderId) {
+      fileMetadata.parents = [parentFolderId]; // Assign to a parent folder if specified
+  }
+
+  const folder = await drive.files.create({
+      resource: fileMetadata,
+      fields: "id",               // Only return the folder ID
+  });
+
+  return folder.data.id;        // Return the created folder's ID
+};
 
 
 
 
 
-module.exports = { uploadFile, deleteFile, getFileLink };
+
+
+module.exports = { uploadFile, deleteFile, getFileLink, createFolder, uploadFileToDrive };
