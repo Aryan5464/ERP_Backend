@@ -56,11 +56,31 @@ const Employee = mongoose.model('Employee', employeeSchema);
 const clientSchema = new Schema({
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true },
+    contactNumber: { type: String },
     password: { type: String, required: true },
     companyName: { type: String, required: true },
-    companyAddress: { type: String },
-    contactNumber: { type: String },
-    gstNumber: { type: String }, // New GST Number attribute
+    corporateAddress: { type: String }, // New field for corporate address
+    gstNumber: { type: String }, // GST Number
+    panNumber: { type: String }, // PAN field
+    numberOfCompanies: { type: Number }, // Number of companies/firms
+    ownerDirectorDetails: [{ // Array to hold details of owners/directors
+        name: { type: String, required: true },
+        email: {type: String},
+        contact: { type: String, required: true }
+    }],
+    authorizedSignatory: {
+        name: { type: String, required: true },
+        email: {type: String},
+        contact: { type: String, required: true }
+    },
+    documents: { // Nested structure for document links
+        employeeMasterDatabase: { type: String }, // URL or reference to uploaded file
+        currentSalaryStructure: { type: String }, // URL or reference to uploaded file
+        previousSalarySheets: { type: String }, // URL or reference to uploaded files
+        currentHRPolicies: { type: String }, // URL or reference to uploaded file
+        leaveBalance: { type: String } // Leave balance data till last month-end
+    },
+    website: { type: String }, 
     status: {
         type: String,
         enum: ['Accepted', 'Requested', 'Rejected'],
@@ -68,6 +88,11 @@ const clientSchema = new Schema({
     },
     teamLeader: { type: Schema.Types.ObjectId, ref: 'TeamLeader' },
     tasks: [{ type: Schema.Types.ObjectId, ref: 'Task' }],
+    // complianceInfo: {  // for future
+    //     credentials: { type: String }, // Credentials for compliance
+    //     applicability: { type: String }, // Applicability details
+    //     fyRecord: { type: String } // Record for the current financial year
+    // },
 }, { timestamps: true });
 
 const Client = mongoose.model('Client', clientSchema);

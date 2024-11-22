@@ -1,32 +1,32 @@
 const { Client } = require('../models/models');
 const { hashPassword, comparePasswords } = require('../utils/bcryptUtils');
 const { generateToken } = require('../utils/jwtUtils');
+const formidable = require("formidable");
+const { google } = require("googleapis");
+
 
 const signupClient = async (req, res) => {
     try {
-        const { name, email, password, companyName, companyAddress, contactNumber, gstNumber } = req.body;
+        const { name, email, password, companyName, corporateAddress, contactNumber, gstNumber, panNumber, numberOfCompanies, authorizedSignatory, ownerDirectorDetails, website } = req.body;
 
-        if (!name || !email || !password || !companyName || !companyAddress || !contactNumber || !gstNumber) {
+        // Validate required fields
+        if (!name || !email || !password || !companyName || !corporateAddress || !contactNumber || !gstNumber || !panNumber || !authorizedSignatory || !authorizedSignatory.name || !authorizedSignatory.contact || !Array.isArray(ownerDirectorDetails) || ownerDirectorDetails.length === 0) {
             return res.status(400).json({ message: 'All required fields must be filled out.' });
         }
 
+        // Check for existing client with the same email
         const existingClient = await Client.findOne({ email });
         if (existingClient) {
             return res.status(409).json({ message: 'Email already in use' });
         }
 
+        // Hash the password
         const hashedPassword = await hashPassword(password);
 
-        const client = new Client({
-            name,
-            email,
-            password: hashedPassword,
-            companyName,
-            companyAddress,
-            contactNumber,
-            gstNumber // New field
-        });
+        // Create a new client
+        const client = new Client({ name, email, password: hashedPassword, companyName, corporateAddress, contactNumber, gstNumber, panNumber, numberOfCompanies, authorizedSignatory, ownerDirectorDetails, website });
 
+        // Save the client to the database
         await client.save();
 
         res.status(201).json({
@@ -37,7 +37,9 @@ const signupClient = async (req, res) => {
                 email: client.email,
                 companyName: client.companyName,
                 status: client.status,
-                gstNumber: client.gstNumber
+                gstNumber: client.gstNumber,
+                panNumber: client.panNumber,
+                website: client.website
             }
         });
     } catch (error) {
@@ -46,12 +48,11 @@ const signupClient = async (req, res) => {
     }
 };
 
-
 const loginClient = async (req, res) => {
     try {
         const { email, password } = req.body;
 
-        // Check if email and password are provided
+        // Validate input
         if (!email || !password) {
             return res.status(400).json({ message: 'Email and password are required' });
         }
@@ -62,7 +63,7 @@ const loginClient = async (req, res) => {
             return res.status(404).json({ message: 'Client not found' });
         }
 
-        // Compare the provided password with the stored hashed password
+        // Validate the password
         const isPasswordValid = await comparePasswords(password, client.password);
         if (!isPasswordValid) {
             return res.status(401).json({ message: 'Invalid credentials' });
@@ -79,7 +80,10 @@ const loginClient = async (req, res) => {
                 name: client.name,
                 email: client.email,
                 companyName: client.companyName,
-                status: client.status
+                status: client.status,
+                website: client.website,
+                gstNumber: client.gstNumber,
+                panNumber: client.panNumber
             }
         });
     } catch (error) {
@@ -87,7 +91,6 @@ const loginClient = async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 };
-
 
 const onboardClient = async (req, res) => {
     try {
@@ -152,29 +155,60 @@ const onboardClient = async (req, res) => {
 };
 
 
-
 const editClient = async (req, res) => {
     try {
-        const { clientId, name, password, companyName, companyAddress, contactNumber, gstNumber } = req.body;
+        const {
+            clientId,
+            name,
+            password,
+            companyName,
+            corporateAddress,
+            contactNumber,
+            gstNumber,
+            panNumber,
+            numberOfCompanies,
+            website,
+            authorizedSignatory,
+            ownerDirectorDetails
+        } = req.body;
 
+        // Validate required fields
         if (!clientId) {
             return res.status(400).json({ message: 'Client ID is required' });
         }
 
+        // Find the client by ID
         const client = await Client.findById(clientId);
         if (!client) {
             return res.status(404).json({ message: 'Client not found' });
         }
 
+        // Update fields if provided
         if (name) client.name = name;
-        if (companyName) client.companyName = companyName;
-        if (companyAddress) client.companyAddress = companyAddress;
-        if (contactNumber) client.contactNumber = contactNumber;
-        if (gstNumber) client.gstNumber = gstNumber; // New field
         if (password) {
             client.password = await hashPassword(password);
         }
+        if (companyName) client.companyName = companyName;
+        if (corporateAddress) client.corporateAddress = corporateAddress;
+        if (contactNumber) client.contactNumber = contactNumber;
+        if (gstNumber) client.gstNumber = gstNumber;
+        if (panNumber) client.panNumber = panNumber;
+        if (numberOfCompanies !== undefined) client.numberOfCompanies = numberOfCompanies; // Allow 0
+        if (website) client.website = website;
 
+        // Update authorized signatory if provided
+        if (authorizedSignatory) {
+            if (authorizedSignatory.name) client.authorizedSignatory.name = authorizedSignatory.name;
+            if (authorizedSignatory.email) client.authorizedSignatory.email = authorizedSignatory.email;
+            if (authorizedSignatory.contact) client.authorizedSignatory.contact = authorizedSignatory.contact;
+        }
+
+        // Update owner/director details if provided
+        if (Array.isArray(ownerDirectorDetails) && ownerDirectorDetails.length > 0) {
+            client.ownerDirectorDetails = ownerDirectorDetails;
+        }
+
+        // Save updated client
         await client.save();
 
         res.status(200).json({
@@ -184,9 +218,14 @@ const editClient = async (req, res) => {
                 name: client.name,
                 email: client.email,
                 companyName: client.companyName,
-                companyAddress: client.companyAddress,
+                corporateAddress: client.corporateAddress,
                 contactNumber: client.contactNumber,
-                gstNumber: client.gstNumber // New field
+                gstNumber: client.gstNumber,
+                panNumber: client.panNumber,
+                numberOfCompanies: client.numberOfCompanies,
+                website: client.website,
+                authorizedSignatory: client.authorizedSignatory,
+                ownerDirectorDetails: client.ownerDirectorDetails
             }
         });
     } catch (error) {
@@ -194,7 +233,6 @@ const editClient = async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 };
-
 
 const deleteClient = async (req, res) => {
     try {
@@ -246,9 +284,9 @@ const getClientsForTeamLeader = async (req, res) => {
         }
 
         // Fetch clients associated with the team leader and with status 'Accepted'
-        const clients = await Client.find({ 
-            teamLeader: teamLeaderId, 
-            status: 'Accepted' 
+        const clients = await Client.find({
+            teamLeader: teamLeaderId,
+            status: 'Accepted'
         });
 
         // Check if no clients are found
@@ -267,6 +305,50 @@ const getClientsForTeamLeader = async (req, res) => {
     }
 };
 
+const uploadDocuments = async (req, res) => {
+    const form = new formidable.IncomingForm({ multiples: true });
+
+    form.parse(req, async (err, fields, files) => {
+        if (err) {
+            return res.status(500).json({ message: "File parsing error", error: err });
+        }
+
+        const { clientId } = fields;
+        if (!clientId) {
+            return res.status(400).json({ message: "Client ID is required" });
+        }
+
+        try {
+            const client = await Client.findById(clientId);
+            if (!client) {
+                return res.status(404).json({ message: "Client not found" });
+            }
+
+            // Step 1: Create folder structure in Google Drive
+            const clientsFolderId = await createFolder("Clients");
+            const clientFolderName = `${client.name}_${client.contactNumber}`;
+            const clientFolderId = await createFolder(clientFolderName, clientsFolderId);
+
+            // Step 2: Upload files to the Drive folder
+            const uploadedFiles = {};
+            for (const [key, file] of Object.entries(files)) {
+                if (file) {
+                    const fileId = await uploadFileToDrive(clientFolderId, file);
+                    uploadedFiles[key] = fileId;
+                }
+            }
+
+            // Step 3: Update the client document in MongoDB
+            client.documents = { ...client.documents, ...uploadedFiles };
+            await client.save();
+
+            res.json({ message: "Documents uploaded successfully", uploadedFiles });
+        } catch (error) {
+            console.error("Error in document upload:", error);
+            res.status(500).json({ message: "Error in document upload", error });
+        }
+    });
+};
 
 
 module.exports = {
@@ -276,5 +358,6 @@ module.exports = {
     editClient,
     deleteClient,
     getAllClients,
-    getClientsForTeamLeader
+    getClientsForTeamLeader, 
+    uploadDocuments
 };
