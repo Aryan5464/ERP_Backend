@@ -21,7 +21,7 @@ router.get('/requested-tasks', getRequestedTasksForTeamLeader); // For Team Lead
 router.post('/assign-or-reject', assignOrRejectRequestedTask); // For Team Leader
 
 // Route to delete a task (now with POST method and taskId in the body)
-router.delete('/delete', deleteTask); 
+router.post('/delete', deleteTask); 
 
 // Route to update the status of a task
 router.put('/update-status', updateTaskStatus);  // Example: /task/update-status
