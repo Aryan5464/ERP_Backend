@@ -103,7 +103,7 @@ const taskSchema = new Schema({
     description: { type: String, required: true },
     status: {
         type: String,
-        enum: ['Active', 'Work in Progress', 'Review', 'Resolved'],
+        enum: ['Active', 'Work in Progress', 'Review', 'Pending', 'Resolved'],
         default: 'Active'
     },
     category: {

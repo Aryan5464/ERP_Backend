@@ -186,6 +186,35 @@ const getAdminHierarchy = async (req, res) => {
     }
 };
 
+const updateAdminPassword = async (req, res) => {
+    try {
+        const { adminId, newPassword } = req.body;
+
+        // Validate inputs
+        if (!adminId || !newPassword) {
+            return res.status(400).json({ message: 'Admin ID and new password are required' });
+        }
+
+        // Validate admin existence
+        const admin = await Admin.findById(adminId);
+        if (!admin) {
+            return res.status(404).json({ message: 'Admin not found' });
+        }
+
+        // Hash the new password
+        const hashedPassword = await hashPassword(newPassword);
+
+        // Update the password in the database
+        admin.password = hashedPassword;
+        await admin.save();
+
+        res.status(200).json({ message: 'Password updated successfully' });
+    } catch (error) {
+        console.error('Error updating admin password:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
 
 
 module.exports = {
@@ -193,5 +222,6 @@ module.exports = {
     loginAdmin,
     editAdmin,
     deleteAdmin,
-    getAdminHierarchy
+    getAdminHierarchy,
+    updateAdminPassword
 };
