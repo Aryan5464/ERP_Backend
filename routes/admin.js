@@ -18,6 +18,4 @@ router.post('/hierarchy', getAdminHierarchy);
 
 router.post('/update-password', updateAdminPassword);
 
-
-
 module.exports = router;

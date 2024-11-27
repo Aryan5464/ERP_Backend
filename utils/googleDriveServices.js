@@ -5,7 +5,7 @@ const { google } = require('googleapis');
 const CLIENT_ID = '264377568077-mv41em86lh5r1bd1svoj1i7e1n5pal3l.apps.googleusercontent.com';
 const CLIENT_SECRET = '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';
 const REDIRECT_URI = 'https://developers.google.com/oauthplayground'; // Set during Google Cloud setup
-const REFRESH_TOKEN = '1//04tn77xTdHCY9CgYIARAAGAQSNwF-L9IryYtEtzboFvB0rsG4MG7lSmi4wyGgti-rBf3jyC0nqG59Sjq0IdqLRzjjccLr8SYAxNE'; // Obtain this from OAuth2 consent flow
+const REFRESH_TOKEN = '1//04fRTvD7Rddb3CgYIARAAGAQSNwF-L9IrTjcM9tagXXOYMk_vuSnLV4T4KqbQ8q8p3gJkOtVNmJvRtaEyawgj9UNiTco7S-SCZyE'; // Obtain this from OAuth2 consent flow
 
 const oauth2Client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI);
 
@@ -71,50 +71,106 @@ const getFileLink = async (fileId) => {
 };
 
 
-const uploadFileToDrive = async (folderId, file) => {
-  const fileMetadata = {
-      name: file.originalFilename, // Name of the file as it will appear in Google Drive
-      parents: [folderId],         // Parent folder ID for organization
-  };
+// const uploadFileToDrive = async (folderId, file) => {
+//   const fileMetadata = {
+//     name: file.originalFilename, // Name of the file as it will appear in Google Drive
+//     parents: [folderId],         // Parent folder ID for organization
+//   };
 
+
+//   const media = {
+//     mimeType: file.mimetype,     // File MIME type (e.g., application/pdf)
+//     body: fs.createReadStream(file.filepath), // File data as a stream
+//   };
+
+//   const response = await drive.files.create({
+//     resource: fileMetadata,
+//     media,                      // Media content to upload
+//     fields: "id",               // Only return the file ID
+//   });
+
+//   return response.data.id;      // Return the uploaded file's ID
+// };
+
+
+// const createFolder = async (name, parentFolderId = null) => {
+//   const fileMetadata = {
+//     name,                       // Folder name
+//     mimeType: "application/vnd.google-apps.folder", // MIME type for Google Drive folders
+//   };
+
+//   if (parentFolderId) {
+//     fileMetadata.parents = [parentFolderId]; // Assign to a parent folder if specified
+//   }
+
+//   const folder = await drive.files.create({
+//     resource: fileMetadata,
+//     fields: "id",               // Only return the folder ID
+//   });
+
+//   return folder.data.id;        // Return the created folder's ID
+// };
+const uploadFileToDrive = async (folderId, file) => {
+  if (!file || !file.filepath) {
+    console.error("Invalid file object received:", file);
+    throw new Error("File path is undefined. Ensure the file is uploaded correctly.");
+  }
+
+  const fileMetadata = {
+    name: file.originalFilename || "unnamed-file",
+    parents: [folderId],
+  };
 
   const media = {
-      mimeType: file.mimetype,     // File MIME type (e.g., application/pdf)
-      body: fs.createReadStream(file.filepath), // File data as a stream
+    mimeType: file.mimetype,
+    body: fs.createReadStream(file.filepath),
   };
 
-  const response = await drive.files.create({
+  try {
+    const response = await drive.files.create({
       resource: fileMetadata,
-      media,                      // Media content to upload
-      fields: "id",               // Only return the file ID
-  });
+      media,
+      fields: "id",
+    });
 
-  return response.data.id;      // Return the uploaded file's ID
+    return response.data.id;
+  } catch (error) {
+    console.error("Error uploading file to Google Drive:", error);
+    throw error;
+  }
 };
 
-
-const createFolder = async (name, parentFolderId = null) => {
-  const fileMetadata = {
-      name,                       // Folder name
-      mimeType: "application/vnd.google-apps.folder", // MIME type for Google Drive folders
-  };
-
+// Function to create or fetch a folder in Google Drive
+const getOrCreateFolder = async (name, parentFolderId = null) => {
+  let query = `name='${name}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
   if (parentFolderId) {
-      fileMetadata.parents = [parentFolderId]; // Assign to a parent folder if specified
+    query += ` and '${parentFolderId}' in parents`;
+  }
+
+  const response = await drive.files.list({
+    q: query,
+    fields: "files(id, name)",
+    spaces: "drive",
+  });
+
+  if (response.data.files.length > 0) {
+    return response.data.files[0].id;
   }
 
   const folder = await drive.files.create({
-      resource: fileMetadata,
-      fields: "id",               // Only return the folder ID
+    resource: {
+      name,
+      mimeType: "application/vnd.google-apps.folder",
+      parents: parentFolderId ? [parentFolderId] : [],
+    },
+    fields: "id",
   });
 
-  return folder.data.id;        // Return the created folder's ID
+  return folder.data.id;
 };
 
 
 
 
 
-
-
-module.exports = { uploadFile, deleteFile, getFileLink, createFolder, uploadFileToDrive };
+module.exports = { uploadFile, deleteFile, getFileLink, uploadFileToDrive, getOrCreateFolder };

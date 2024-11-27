@@ -1,8 +1,11 @@
-const { Client } = require('../models/models');
+const { Client, TeamLeader } = require('../models/models');
 const { hashPassword, comparePasswords } = require('../utils/bcryptUtils');
-const { uploadFileToDrive, createFolder } = require('../utils/googleDriveServices');
+const { uploadFileToDrive, getOrCreateFolder } = require('../utils/googleDriveServices');
 const { generateToken } = require('../utils/jwtUtils');
 const formidable = require("formidable");
+const path = require("path"); // Import path module
+// const fs = require("fs");
+const fs = require("fs/promises"); // Use the promise-based API
 const { google } = require("googleapis");
 
 
@@ -306,51 +309,88 @@ const getClientsForTeamLeader = async (req, res) => {
     }
 };
 
+// Endpoint to handle document uploads
 const uploadDocuments = async (req, res) => {
-    const form = new formidable.IncomingForm({ multiples: true });
+    try {
+        const uploadDir = path.join(__dirname, "uploads");
 
-    form.parse(req, async (err, fields, files) => {
-        if (err) {
-            return res.status(500).json({ message: "File parsing error", error: err });
-        }
-
-        const { clientId } = fields;
-        if (!clientId) {
-            return res.status(400).json({ message: "Client ID is required" });
-        }
-
+        // Ensure the 'uploads' directory exists
         try {
-            const client = await Client.findById(clientId);
-            if (!client) {
-                return res.status(404).json({ message: "Client not found" });
-            }
-
-            // Step 1: Create folder structure in Google Drive
-            const clientsFolderId = await createFolder("Clients");
-            const clientFolderName = `${client.name}_${client.contactNumber}`;
-            const clientFolderId = await createFolder(clientFolderName, clientsFolderId);
-
-            // Step 2: Upload files to the Drive folder
-            const uploadedFiles = {};
-            for (const [key, file] of Object.entries(files)) {
-                if (file) {
-                    const fileId = await uploadFileToDrive(clientFolderId, file);
-                    uploadedFiles[key] = fileId;
-                }
-            }
-
-            // Step 3: Update the client document in MongoDB
-            client.documents = { ...client.documents, ...uploadedFiles };
-            await client.save();
-
-            res.json({ message: "Documents uploaded successfully", uploadedFiles });
-        } catch (error) {
-            console.error("Error in document upload:", error);
-            res.status(500).json({ message: "Error in document upload", error });
+            await fs.mkdir(uploadDir, { recursive: true });
+            console.log("Uploads directory ensured.");
+        } catch (mkdirError) {
+            console.error("Error creating upload directory:", mkdirError);
+            return res.status(500).json({ message: "Failed to create upload directory" });
         }
-    });
-};
 
+        const form = new formidable.IncomingForm({
+            multiples: true,
+            keepExtensions: true,
+            uploadDir, // Save files to the 'uploads' directory
+            allowEmptyFiles: false,
+        });
+
+        form.parse(req, async (err, fields, files) => {
+            if (err) {
+                console.error("Formidable parsing error:", err);
+                return res.status(500).json({ message: "File parsing error", error: err });
+            }
+
+            const { clientId } = fields;
+            if (!clientId) {
+                return res.status(400).json({ message: "Client ID is required" });
+            }
+
+            try {
+                const client = await Client.findById(clientId);
+                if (!client) {
+                    return res.status(404).json({ message: "Client not found" });
+                }
+
+                const clientsFolderId = await getOrCreateFolder("Clients");
+                const clientFolderName = `${client.name}_${client.contactNumber}`;
+                const clientFolderId = await getOrCreateFolder(clientFolderName, clientsFolderId);
+
+                const uploadedFiles = {};
+                for (const [key, fileArray] of Object.entries(files)) {
+                    if (Array.isArray(fileArray)) {
+                        for (const file of fileArray) {
+                            if (file.filepath) {
+                                try {
+                                    const fileId = await uploadFileToDrive(clientFolderId, file);
+                                    uploadedFiles[key] = fileId;
+                                    console.log(`Uploaded file "${file.originalFilename}" with ID: ${fileId}`);
+                                    await fs.unlink(file.filepath);
+                                    console.log(`Deleted local file: ${file.filepath}`);
+                                } catch (uploadError) {
+                                    console.error(`Failed to upload file "${file.originalFilename}":`, uploadError);
+                                }
+                            } else {
+                                console.warn(`Skipping file upload for key: ${key}. Filepath is undefined.`);
+                            }
+                        }
+                    } else {
+                        console.warn(`Unexpected structure for key: ${key}`);
+                    }
+                }
+
+                client.documents = { ...client.documents, ...uploadedFiles };
+                await client.save();
+
+                res.json({
+                    message: "Documents uploaded successfully",
+                    uploadedFiles,
+                });
+            } catch (error) {
+                console.error("Error in document upload:", error);
+                res.status(500).json({ message: "Error in document upload", error });
+            }
+        });
+    } catch (globalError) {
+        console.error("Unexpected error:", globalError);
+        res.status(500).json({ message: "Unexpected server error", error: globalError });
+    }
+};
 
 module.exports = {
     signupClient,
@@ -359,6 +399,6 @@ module.exports = {
     editClient,
     deleteClient,
     getAllClients,
-    getClientsForTeamLeader, 
+    getClientsForTeamLeader,
     uploadDocuments
 };
