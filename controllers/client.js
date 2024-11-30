@@ -1,6 +1,6 @@
 const { Client, TeamLeader } = require('../models/models');
 const { hashPassword, comparePasswords } = require('../utils/bcryptUtils');
-const { uploadFileToDrive, getOrCreateFolder } = require('../utils/googleDriveServices');
+const { uploadFileToDrive, getOrCreateFolder, getFileLink } = require('../utils/googleDriveServices');
 const { generateToken } = require('../utils/jwtUtils');
 const formidable = require("formidable");
 const path = require("path"); // Import path module
@@ -392,6 +392,46 @@ const uploadDocuments = async (req, res) => {
     }
 };
 
+const getDocLinks = async (req, res) => {
+    try {
+        const { clientId } = req.body;
+
+        // Step 1: Fetch the client document details from the database
+        const client = await Client.findById(clientId);
+        if (!client) {
+            return res.status(404).json({ message: "Client not found" });
+        }
+
+        // Step 2: Extract document file IDs from the client record
+        const documents = client.documents || {};
+        const documentLinks = {};
+
+        // Step 3: Fetch public links for each document file ID
+        for (const [docName, fileId] of Object.entries(documents)) {
+            if (fileId) {
+                try {
+                    const links = await getFileLink(fileId); // Fetch webViewLink and webContentLink
+                    documentLinks[docName] = links;
+                } catch (error) {
+                    console.error(`Error fetching link for document "${docName}":`, error);
+                    documentLinks[docName] = { error: "Failed to fetch link" };
+                }
+            } else {
+                documentLinks[docName] = { error: "File ID not available" };
+            }
+        }
+
+        // Step 4: Send response with the document links
+        res.status(200).json({
+            message: "Document links retrieved successfully",
+            documentLinks,
+        });
+    } catch (error) {
+        console.error("Error retrieving document links:", error);
+        res.status(500).json({ message: "Failed to retrieve document links", error });
+    }
+};
+
 module.exports = {
     signupClient,
     loginClient,
@@ -400,5 +440,6 @@ module.exports = {
     deleteClient,
     getAllClients,
     getClientsForTeamLeader,
-    uploadDocuments
+    uploadDocuments,
+    getDocLinks
 };
