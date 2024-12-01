@@ -5,9 +5,7 @@ const { generateToken } = require('../utils/jwtUtils');
 const formidable = require("formidable");
 const path = require("path"); // Import path module
 // const fs = require("fs");
-const fs = require("fs/promises"); // Use the promise-based API
-const { google } = require("googleapis");
-
+const fs = require("fs/promises"); // Use the promise-based API 
 
 const signupClient = async (req, res) => {
     try {
@@ -432,6 +430,68 @@ const getDocLinks = async (req, res) => {
     }
 };
 
+const uploadClientDP = async (req, res) => {
+    try {
+        const form = new formidable.IncomingForm({
+            multiples: false,
+            keepExtensions: true,
+        });
+
+        form.parse(req, async (err, fields, files) => {
+            if (err) {
+                console.error("Form parsing error:", err);
+                return res.status(500).json({ message: "Error parsing form", error: err });
+            }
+
+            const fileArray = files.image;
+            const file = Array.isArray(fileArray) ? fileArray[0] : fileArray;
+
+            if (!file || !file.filepath) {
+                return res.status(400).json({ message: "Image file is required or invalid" });
+            }
+
+            try {
+                const clientFolderId = await getOrCreateFolder("Client");
+                const imageFolderId = await getOrCreateFolder("image", clientFolderId);
+                const fileId = await uploadFileToDrive(imageFolderId, file);
+
+                const { clientId } = fields;
+                if (!clientId) {
+                    return res.status(400).json({ message: "Client ID is required" });
+                }
+
+                const client = await Client.findById(clientId);
+                if (!client) {
+                    return res.status(404).json({ message: "Client not found" });
+                }
+
+                client.dp = fileId;
+                await client.save();
+
+                res.json({
+                    message: "Image uploaded successfully",
+                    fileId,
+                });
+            } catch (uploadError) {
+                console.error("Error uploading image:", uploadError);
+                res.status(500).json({ message: "Error uploading image", error: uploadError });
+            } finally {
+                try {
+                    if (file.filepath) {
+                        await fs.unlink(file.filepath);
+                    }
+                } catch (cleanupError) {
+                    console.error("Error cleaning up temp file:", cleanupError);
+                }
+            }
+        });
+    } catch (globalError) {
+        console.error("Unexpected server error:", globalError);
+        res.status(500).json({ message: "Unexpected server error", error: globalError });
+    }
+};
+
+
 module.exports = {
     signupClient,
     loginClient,
@@ -441,5 +501,6 @@ module.exports = {
     getAllClients,
     getClientsForTeamLeader,
     uploadDocuments,
-    getDocLinks
+    getDocLinks,
+    uploadClientDP
 };

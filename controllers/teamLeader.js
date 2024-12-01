@@ -1,10 +1,13 @@
 // controllers/teamLeaderController.js
 
 const { default: mongoose } = require('mongoose');
-const {TeamLeader, Task, Employee, Client } = require('../models/models');
-const {Admin} = require('../models/models');
+const { TeamLeader, Task, Employee, Client } = require('../models/models');
+const { Admin } = require('../models/models');
 const { hashPassword, comparePasswords } = require('../utils/bcryptUtils');
 const { generateToken } = require('../utils/jwtUtils');
+const { getOrCreateFolder, uploadFileToDrive } = require('../utils/googleDriveServices');
+const formidable = require("formidable");
+const fs = require("fs/promises");
 
 // Function to create a new TeamLeader
 const createTeamLeader = async (req, res) => {
@@ -230,8 +233,8 @@ const deleteTeamLeaderWithReassignment = async (req, res) => {
         // Step 4: Clean up team leader to delete
         await TeamLeader.findByIdAndDelete(teamLeaderId);
 
-        res.status(200).json({ 
-            message: 'Team Leader deleted and reassigned successfully', 
+        res.status(200).json({
+            message: 'Team Leader deleted and reassigned successfully',
             reassigned: {
                 employees: employeesToTransfer,
                 tasks: taskIds,
@@ -383,13 +386,76 @@ const getTeamLeaderTasks = async (req, res) => {
     }
 };
 
+const uploadTeamLeaderDP = async (req, res) => {
+    try {
+        const form = new formidable.IncomingForm({
+            multiples: false,
+            keepExtensions: true,
+        });
+
+        form.parse(req, async (err, fields, files) => {
+            if (err) {
+                console.error("Form parsing error:", err);
+                return res.status(500).json({ message: "Error parsing form", error: err });
+            }
+
+            const fileArray = files.image;
+            const file = Array.isArray(fileArray) ? fileArray[0] : fileArray;
+
+            if (!file || !file.filepath) {
+                return res.status(400).json({ message: "Image file is required or invalid" });
+            }
+
+            try {
+                const teamLeaderFolderId = await getOrCreateFolder("TeamLeader");
+                const imageFolderId = await getOrCreateFolder("image", teamLeaderFolderId);
+                const fileId = await uploadFileToDrive(imageFolderId, file);
+
+                const { teamLeaderId } = fields;
+                if (!teamLeaderId) {
+                    return res.status(400).json({ message: "TeamLeader ID is required" });
+                }
+
+                const teamLeader = await TeamLeader.findById(teamLeaderId);
+                if (!teamLeader) {
+                    return res.status(404).json({ message: "TeamLeader not found" });
+                }
+
+                teamLeader.dp = fileId;
+                await teamLeader.save();
+
+                res.json({
+                    message: "Image uploaded successfully",
+                    fileId,
+                });
+            } catch (uploadError) {
+                console.error("Error uploading image:", uploadError);
+                res.status(500).json({ message: "Error uploading image", error: uploadError });
+            } finally {
+                try {
+                    if (file.filepath) {
+                        await fs.unlink(file.filepath);
+                    }
+                } catch (cleanupError) {
+                    console.error("Error cleaning up temp file:", cleanupError);
+                }
+            }
+        });
+    } catch (globalError) {
+        console.error("Unexpected server error:", globalError);
+        res.status(500).json({ message: "Unexpected server error", error: globalError });
+    }
+};
+
+
 
 module.exports = {
     createTeamLeader,
     loginTeamLeader,
     editTeamLeader,
-    deleteTeamLeaderWithReassignment, 
+    deleteTeamLeaderWithReassignment,
     deleteTeamLeaderAndPromoteEmployee,
-    getTeamLeaderHierarchy, 
-    getTeamLeaderTasks
+    getTeamLeaderHierarchy,
+    getTeamLeaderTasks,
+    uploadTeamLeaderDP
 };

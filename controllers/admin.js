@@ -3,6 +3,10 @@
 const {Admin} = require('../models/models');
 const { hashPassword, comparePasswords } = require('../utils/bcryptUtils');
 const { generateToken } = require('../utils/jwtUtils');
+const { getOrCreateFolder, uploadFileToDrive } = require('../utils/googleDriveServices');
+const formidable = require("formidable"); 
+const fs = require("fs/promises");
+
 
 // Function to create a new Admin
 const createAdmin = async (req, res) => {
@@ -215,6 +219,68 @@ const updateAdminPassword = async (req, res) => {
     }
 };
 
+const uploadAdminDP = async (req, res) => {
+    try {
+        const form = new formidable.IncomingForm({
+            multiples: false,
+            keepExtensions: true,
+        });
+
+        form.parse(req, async (err, fields, files) => {
+            if (err) {
+                console.error("Form parsing error:", err);
+                return res.status(500).json({ message: "Error parsing form", error: err });
+            }
+
+            const fileArray = files.image;
+            const file = Array.isArray(fileArray) ? fileArray[0] : fileArray;
+
+            if (!file || !file.filepath) {
+                return res.status(400).json({ message: "Image file is required or invalid" });
+            }
+
+            try {
+                const adminFolderId = await getOrCreateFolder("Admin");
+                const imageFolderId = await getOrCreateFolder("image", adminFolderId);
+                const fileId = await uploadFileToDrive(imageFolderId, file);
+
+                const { adminId } = fields;
+                if (!adminId) {
+                    return res.status(400).json({ message: "Admin ID is required" });
+                }
+
+                const admin = await Admin.findById(adminId);
+                if (!admin) {
+                    return res.status(404).json({ message: "Admin not found" });
+                }
+
+                admin.dp = fileId;
+                await admin.save();
+
+                res.json({
+                    message: "Image uploaded successfully",
+                    fileId,
+                });
+            } catch (uploadError) {
+                console.error("Error uploading image:", uploadError);
+                res.status(500).json({ message: "Error uploading image", error: uploadError });
+            } finally {
+                try {
+                    if (file.filepath) {
+                        await fs.unlink(file.filepath);
+                    }
+                } catch (cleanupError) {
+                    console.error("Error cleaning up temp file:", cleanupError);
+                }
+            }
+        });
+    } catch (globalError) {
+        console.error("Unexpected server error:", globalError);
+        res.status(500).json({ message: "Unexpected server error", error: globalError });
+    }
+};
+
+
 
 
 module.exports = {
@@ -223,5 +289,6 @@ module.exports = {
     editAdmin,
     deleteAdmin,
     getAdminHierarchy,
-    updateAdminPassword
+    updateAdminPassword,
+    uploadAdminDP
 };

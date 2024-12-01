@@ -3,6 +3,9 @@
 const {Employee, TeamLeader, Task} = require('../models/models');
 const { hashPassword, comparePasswords } = require('../utils/bcryptUtils');
 const { generateToken } = require('../utils/jwtUtils');
+const { getOrCreateFolder, uploadFileToDrive } = require('../utils/googleDriveServices');
+const formidable = require("formidable");
+const fs = require("fs/promises");
 
 // Function to create an Employee
 const createEmployee = async (req, res) => {
@@ -184,6 +187,68 @@ const getEmployeeTasks = async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 };
+ 
+const uploadEmployeeDP = async (req, res) => {
+    try {
+        const form = new formidable.IncomingForm({
+            multiples: false,
+            keepExtensions: true,
+        });
+
+        form.parse(req, async (err, fields, files) => {
+            if (err) {
+                console.error("Form parsing error:", err);
+                return res.status(500).json({ message: "Error parsing form", error: err });
+            }
+
+            const fileArray = files.image;
+            const file = Array.isArray(fileArray) ? fileArray[0] : fileArray;
+
+            if (!file || !file.filepath) {
+                return res.status(400).json({ message: "Image file is required or invalid" });
+            }
+
+            try {
+                const employeeFolderId = await getOrCreateFolder("Employee");
+                const imageFolderId = await getOrCreateFolder("image", employeeFolderId);
+                const fileId = await uploadFileToDrive(imageFolderId, file);
+
+                const { employeeId } = fields;
+                if (!employeeId) {
+                    return res.status(400).json({ message: "Employee ID is required" });
+                }
+
+                const employee = await Employee.findById(employeeId);
+                if (!employee) {
+                    return res.status(404).json({ message: "Employee not found" });
+                }
+
+                employee.dp = fileId;
+                await employee.save();
+
+                res.json({
+                    message: "Image uploaded successfully",
+                    fileId,
+                });
+            } catch (uploadError) {
+                console.error("Error uploading image:", uploadError);
+                res.status(500).json({ message: "Error uploading image", error: uploadError });
+            } finally {
+                try {
+                    if (file.filepath) {
+                        await fs.unlink(file.filepath);
+                    }
+                } catch (cleanupError) {
+                    console.error("Error cleaning up temp file:", cleanupError);
+                }
+            }
+        });
+    } catch (globalError) {
+        console.error("Unexpected server error:", globalError);
+        res.status(500).json({ message: "Unexpected server error", error: globalError });
+    }
+};
+ 
 
 
 module.exports = {
@@ -191,5 +256,6 @@ module.exports = {
     loginEmployee,
     editEmployee,
     deleteEmployee,
-    getEmployeeTasks
+    getEmployeeTasks,
+    uploadEmployeeDP
 };
