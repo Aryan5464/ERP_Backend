@@ -491,6 +491,38 @@ const uploadClientDP = async (req, res) => {
     }
 };
 
+const getClientDP = async (req, res) => {
+    try {
+        const { clientId } = req.body;
+        if (!clientId) {
+            return res.status(400).json({ message: "Client ID is required" });
+        }
+
+        const client = await Client.findById(clientId);
+        if (!client) {
+            return res.status(404).json({ message: "Client not found" });
+        }
+
+        if (!client.dp) {
+            return res.status(404).json({ message: "Profile image not found for Client" });
+        }
+
+        const fileLink = await getFileLink(client.dp);
+        if (!fileLink) {
+            return res.status(500).json({ message: "Error fetching image link from Google Drive" });
+        }
+
+        res.json({
+            message: "Profile image retrieved successfully",
+            webViewLink: fileLink.webViewLink,
+            webContentLink: fileLink.webContentLink,
+        });
+    } catch (error) {
+        console.error("Error fetching Client profile image:", error);
+        res.status(500).json({ message: "Unexpected server error", error });
+    }
+};
+
 
 module.exports = {
     signupClient,
@@ -502,5 +534,6 @@ module.exports = {
     getClientsForTeamLeader,
     uploadDocuments,
     getDocLinks,
-    uploadClientDP
+    uploadClientDP,
+    getClientDP
 };

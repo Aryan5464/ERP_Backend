@@ -1,5 +1,5 @@
 const express = require('express');
-const { loginSuperAdmin, editSuperAdmin, uploadSuperAdminDP } = require('../controllers/superAdmin');
+const { loginSuperAdmin, editSuperAdmin, uploadSuperAdminDP, getSuperAdminDP } = require('../controllers/superAdmin');
 const verifyAuthToken = require('../middleware/authMiddleware');
 const router = express.Router();
 
@@ -10,6 +10,10 @@ router.post('/login', loginSuperAdmin);
 router.put('/edit', verifyAuthToken, editSuperAdmin);
 
 router.post('/uploadDP', uploadSuperAdminDP);
+
+router.post('/dp', getSuperAdminDP);
+
+
 
 
 module.exports = router;

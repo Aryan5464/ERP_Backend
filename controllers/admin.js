@@ -1,10 +1,10 @@
 // controllers/adminController.js
 
-const {Admin} = require('../models/models');
+const { Admin } = require('../models/models');
 const { hashPassword, comparePasswords } = require('../utils/bcryptUtils');
 const { generateToken } = require('../utils/jwtUtils');
-const { getOrCreateFolder, uploadFileToDrive } = require('../utils/googleDriveServices');
-const formidable = require("formidable"); 
+const { getOrCreateFolder, uploadFileToDrive, getFileLink } = require('../utils/googleDriveServices');
+const formidable = require("formidable");
 const fs = require("fs/promises");
 
 
@@ -280,6 +280,37 @@ const uploadAdminDP = async (req, res) => {
     }
 };
 
+const getAdminDP = async (req, res) => {
+    try {
+        const { adminId } = req.body;
+        if (!adminId) {
+            return res.status(400).json({ message: "Admin ID is required" });
+        }
+
+        const admin = await Admin.findById(adminId);
+        if (!admin) {
+            return res.status(404).json({ message: "Admin not found" });
+        }
+
+        if (!admin.dp) {
+            return res.status(404).json({ message: "Profile image not found for Admin" });
+        }
+
+        const fileLink = await getFileLink(admin.dp);
+        if (!fileLink) {
+            return res.status(500).json({ message: "Error fetching image link from Google Drive" });
+        }
+
+        res.json({
+            message: "Profile image retrieved successfully",
+            webViewLink: fileLink.webViewLink,
+            webContentLink: fileLink.webContentLink,
+        });
+    } catch (error) {
+        console.error("Error fetching Admin profile image:", error);
+        res.status(500).json({ message: "Unexpected server error", error });
+    }
+};
 
 
 
@@ -290,5 +321,6 @@ module.exports = {
     deleteAdmin,
     getAdminHierarchy,
     updateAdminPassword,
-    uploadAdminDP
+    uploadAdminDP,
+    getAdminDP
 };

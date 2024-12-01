@@ -5,7 +5,7 @@ const { TeamLeader, Task, Employee, Client } = require('../models/models');
 const { Admin } = require('../models/models');
 const { hashPassword, comparePasswords } = require('../utils/bcryptUtils');
 const { generateToken } = require('../utils/jwtUtils');
-const { getOrCreateFolder, uploadFileToDrive } = require('../utils/googleDriveServices');
+const { getOrCreateFolder, uploadFileToDrive, getFileLink } = require('../utils/googleDriveServices');
 const formidable = require("formidable");
 const fs = require("fs/promises");
 
@@ -448,6 +448,38 @@ const uploadTeamLeaderDP = async (req, res) => {
 };
 
 
+const getTeamLeaderDP = async (req, res) => {
+    try {
+        const { teamLeaderId } = req.body;
+        if (!teamLeaderId) {
+            return res.status(400).json({ message: "TeamLeader ID is required" });
+        }
+
+        const teamLeader = await TeamLeader.findById(teamLeaderId);
+        if (!teamLeader) {
+            return res.status(404).json({ message: "TeamLeader not found" });
+        }
+
+        if (!teamLeader.dp) {
+            return res.status(404).json({ message: "Profile image not found for TeamLeader" });
+        }
+
+        const fileLink = await getFileLink(teamLeader.dp);
+        if (!fileLink) {
+            return res.status(500).json({ message: "Error fetching image link from Google Drive" });
+        }
+
+        res.json({
+            message: "Profile image retrieved successfully",
+            webViewLink: fileLink.webViewLink,
+            webContentLink: fileLink.webContentLink,
+        });
+    } catch (error) {
+        console.error("Error fetching TeamLeader profile image:", error);
+        res.status(500).json({ message: "Unexpected server error", error });
+    }
+};
+
 
 module.exports = {
     createTeamLeader,
@@ -457,5 +489,6 @@ module.exports = {
     deleteTeamLeaderAndPromoteEmployee,
     getTeamLeaderHierarchy,
     getTeamLeaderTasks,
-    uploadTeamLeaderDP
+    uploadTeamLeaderDP,
+    getTeamLeaderDP
 };

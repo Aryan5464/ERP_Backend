@@ -2,9 +2,9 @@
 
 const { SuperAdmin } = require('../models/models');
 const { comparePasswords, hashPassword } = require('../utils/bcryptUtils');
-const { getOrCreateFolder, uploadFileToDrive } = require('../utils/googleDriveServices');
+const { getOrCreateFolder, uploadFileToDrive, getFileLink } = require('../utils/googleDriveServices');
 const { generateToken } = require('../utils/jwtUtils');
-const formidable = require("formidable"); 
+const formidable = require("formidable");
 const fs = require("fs/promises");
 
 // Function to login SuperAdmin
@@ -161,8 +161,44 @@ const uploadSuperAdminDP = async (req, res) => {
     }
 };
 
+const getSuperAdminDP = async (req, res) => {
+    try {
+        const { superAdminId } = req.body; // Extract ID from the request body
+        if (!superAdminId) {
+            return res.status(400).json({ message: "SuperAdmin ID is required" });
+        }
+
+        // Fetch the SuperAdmin document from the database
+        const superAdmin = await SuperAdmin.findById(superAdminId);
+        if (!superAdmin) {
+            return res.status(404).json({ message: "SuperAdmin not found" });
+        }
+
+        // Check if the profile image (dp) exists
+        if (!superAdmin.dp) {
+            return res.status(404).json({ message: "Profile image not found for SuperAdmin" });
+        }
+
+        // Get the public link from Google Drive
+        const fileLink = await getFileLink(superAdmin.dp);
+        if (!fileLink) {
+            return res.status(500).json({ message: "Error fetching image link from Google Drive" });
+        }
+
+        res.json({
+            message: "Profile image retrieved successfully",
+            webViewLink: fileLink.webViewLink,
+            webContentLink: fileLink.webContentLink,
+        });
+    } catch (error) {
+        console.error("Error fetching SuperAdmin profile image:", error);
+        res.status(500).json({ message: "Unexpected server error", error });
+    }
+};
+
 module.exports = {
     loginSuperAdmin,
     editSuperAdmin,
-    uploadSuperAdminDP
+    uploadSuperAdminDP,
+    getSuperAdminDP
 };
