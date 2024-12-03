@@ -3,7 +3,7 @@
 const { Admin } = require('../models/models');
 const { hashPassword, comparePasswords } = require('../utils/bcryptUtils');
 const { generateToken } = require('../utils/jwtUtils');
-const { getOrCreateFolder, uploadFileToDrive, getFileLink } = require('../utils/googleDriveServices');
+const { getOrCreateFolder, uploadFileToDrive, getFileLink, deleteFile } = require('../utils/googleDriveServices');
 const formidable = require("formidable");
 const fs = require("fs/promises");
 
@@ -312,7 +312,38 @@ const getAdminDP = async (req, res) => {
     }
 };
 
+const deleteAdminDP = async (req, res) => {
+    try {
+        const { adminId } = req.body;
+        if (!adminId) {
+            return res.status(400).json({ message: "Admin ID is required" });
+        }
 
+        const admin = await Admin.findById(adminId);
+        if (!admin) {
+            return res.status(404).json({ message: "Admin not found" });
+        }
+
+        if (!admin.dp) {
+            return res.status(404).json({ message: "Profile image not found for Admin" });
+        }
+
+        const fileId = admin.dp;
+
+        try {
+            await deleteFile(fileId);
+        } catch (error) {
+            return res.status(500).json({ message: "Error deleting file from Google Drive", error });
+        }
+
+        admin.dp = null;
+        await admin.save();
+
+        res.json({ message: "Admin profile image deleted successfully" });
+    } catch (error) {
+        res.status(500).json({ message: "Unexpected server error", error });
+    }
+};
 
 module.exports = {
     createAdmin,
@@ -322,5 +353,6 @@ module.exports = {
     getAdminHierarchy,
     updateAdminPassword,
     uploadAdminDP,
-    getAdminDP
+    getAdminDP,
+    deleteAdminDP
 };

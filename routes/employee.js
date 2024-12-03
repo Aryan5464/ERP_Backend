@@ -1,6 +1,6 @@
 const express = require('express');
 const verifyAuthToken = require('../middleware/authMiddleware');
-const { createEmployee, editEmployee, loginEmployee, deleteEmployee, getEmployeeTasks, uploadEmployeeDP, getEmployeeDP } = require('../controllers/employee');
+const { createEmployee, editEmployee, loginEmployee, deleteEmployee, getEmployeeTasks, uploadEmployeeDP, getEmployeeDP, deleteEmployeeDP } = require('../controllers/employee');
 const router = express.Router();
 
 router.post('/create', verifyAuthToken, createEmployee);
@@ -17,5 +17,6 @@ router.post('/uploadDP', uploadEmployeeDP);
 
 router.post('/dp', getEmployeeDP);
 
+router.post('deleteDP', deleteEmployeeDP)
 
 module.exports = router;

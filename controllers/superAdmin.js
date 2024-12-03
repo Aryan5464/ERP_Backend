@@ -2,7 +2,7 @@
 
 const { SuperAdmin } = require('../models/models');
 const { comparePasswords, hashPassword } = require('../utils/bcryptUtils');
-const { getOrCreateFolder, uploadFileToDrive, getFileLink } = require('../utils/googleDriveServices');
+const { getOrCreateFolder, uploadFileToDrive, getFileLink, deleteFile } = require('../utils/googleDriveServices');
 const { generateToken } = require('../utils/jwtUtils');
 const formidable = require("formidable");
 const fs = require("fs/promises");
@@ -196,9 +196,52 @@ const getSuperAdminDP = async (req, res) => {
     }
 };
 
+const deleteSuperAdminDP = async (req, res) => {
+    try {
+        const { superAdminId } = req.body;
+        if (!superAdminId) {
+            return res.status(400).json({ message: "SuperAdmin ID is required" });
+        }
+
+        // Find the SuperAdmin in the database
+        const superAdmin = await SuperAdmin.findById(superAdminId);
+        if (!superAdmin) {
+            return res.status(404).json({ message: "SuperAdmin not found" });
+        }
+
+        if (!superAdmin.dp) {
+            return res.status(404).json({ message: "Profile image not found for SuperAdmin" });
+        }
+
+        const fileId = superAdmin.dp;
+
+        try {
+            // Delete the file from Google Drive
+            await deleteFile(fileId);
+            console.log(`File with ID ${fileId} deleted successfully.`);
+        } catch (driveError) {
+            console.error("Error deleting file from Google Drive:", driveError);
+            return res.status(500).json({ message: "Error deleting file from Google Drive", error: driveError });
+        }
+
+        // Remove the file ID from the SuperAdmin record in the database
+        superAdmin.dp = null;
+        await superAdmin.save();
+
+        res.json({
+            message: "Profile image deleted successfully",
+        });
+    } catch (error) {
+        console.error("Error deleting SuperAdmin DP:", error);
+        res.status(500).json({ message: "Unexpected server error", error });
+    }
+};
+
+
 module.exports = {
     loginSuperAdmin,
     editSuperAdmin,
     uploadSuperAdminDP,
-    getSuperAdminDP
+    getSuperAdminDP,
+    deleteSuperAdminDP
 };

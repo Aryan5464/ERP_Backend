@@ -1,5 +1,5 @@
 const express = require('express');
-const { createAdmin, editAdmin, loginAdmin, deleteAdmin, getAdminHierarchy, updateAdminPassword, uploadAdminDP, getAdminDP } = require('../controllers/admin');
+const { createAdmin, editAdmin, loginAdmin, deleteAdmin, getAdminHierarchy, updateAdminPassword, uploadAdminDP, getAdminDP, deleteAdminDP } = require('../controllers/admin');
 const verifyAuthToken = require('../middleware/authMiddleware');
 const router = express.Router();
 
@@ -21,6 +21,8 @@ router.post('/update-password', updateAdminPassword);
 router.post('/uploadDP', uploadAdminDP);
 
 router.post('/dp', getAdminDP);
+
+router.post('deleteDP', deleteAdminDP);
 
 
 

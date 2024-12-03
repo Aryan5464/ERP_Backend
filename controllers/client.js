@@ -1,6 +1,6 @@
 const { Client, TeamLeader } = require('../models/models');
 const { hashPassword, comparePasswords } = require('../utils/bcryptUtils');
-const { uploadFileToDrive, getOrCreateFolder, getFileLink } = require('../utils/googleDriveServices');
+const { uploadFileToDrive, getOrCreateFolder, getFileLink, deleteFile } = require('../utils/googleDriveServices');
 const { generateToken } = require('../utils/jwtUtils');
 const formidable = require("formidable");
 const path = require("path"); // Import path module
@@ -524,6 +524,41 @@ const getClientDP = async (req, res) => {
 };
 
 
+const deleteClientDP = async (req, res) => {
+    try {
+        const { clientId } = req.body;
+        if (!clientId) {
+            return res.status(400).json({ message: "Client ID is required" });
+        }
+
+        const client = await Client.findById(clientId);
+        if (!client) {
+            return res.status(404).json({ message: "Client not found" });
+        }
+
+        if (!client.dp) {
+            return res.status(404).json({ message: "Profile image not found for Client" });
+        }
+
+        const fileId = client.dp;
+
+        try {
+            await deleteFile(fileId);
+        } catch (error) {
+            return res.status(500).json({ message: "Error deleting file from Google Drive", error });
+        }
+
+        client.dp = null;
+        await client.save();
+
+        res.json({ message: "Client profile image deleted successfully" });
+    } catch (error) {
+        res.status(500).json({ message: "Unexpected server error", error });
+    }
+};
+
+
+
 module.exports = {
     signupClient,
     loginClient,
@@ -535,5 +570,6 @@ module.exports = {
     uploadDocuments,
     getDocLinks,
     uploadClientDP,
-    getClientDP
+    getClientDP,
+    deleteClientDP
 };
