@@ -22,7 +22,7 @@ router.post('/uploadDP', uploadAdminDP);
 
 router.post('/dp', getAdminDP);
 
-router.post('deleteDP', deleteAdminDP);
+router.post('/deleteDP', deleteAdminDP);
 
 
 

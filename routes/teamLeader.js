@@ -23,6 +23,6 @@ router.post('/uploadDP', uploadTeamLeaderDP);
 
 router.post('/dp', getTeamLeaderDP);
 
-router.post('deleteDP', deleteTeamLeaderDP);
+router.post('/deleteDP', deleteTeamLeaderDP);
 
 module.exports = router;

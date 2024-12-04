@@ -31,6 +31,6 @@ router.post('/uploadDP', uploadClientDP);
 
 router.post('/dp', getClientDP);
 
-router.post('/client/deleteDP', deleteClientDP);
+router.post('/deleteDP', deleteClientDP);
 
 module.exports = router;
