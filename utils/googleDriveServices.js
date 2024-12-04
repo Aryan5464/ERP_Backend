@@ -5,7 +5,7 @@ const { google } = require('googleapis');
 const CLIENT_ID = '264377568077-mv41em86lh5r1bd1svoj1i7e1n5pal3l.apps.googleusercontent.com';
 const CLIENT_SECRET = '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';
 const REDIRECT_URI = 'https://developers.google.com/oauthplayground'; // Set during Google Cloud setup
-const REFRESH_TOKEN = '1//04fRTvD7Rddb3CgYIARAAGAQSNwF-L9IrTjcM9tagXXOYMk_vuSnLV4T4KqbQ8q8p3gJkOtVNmJvRtaEyawgj9UNiTco7S-SCZyE'; // Obtain this from OAuth2 consent flow
+const REFRESH_TOKEN = '1//04Mr-x59fF9fuCgYIARAAGAQSNwF-L9IruZ_lnJnMu0_e0ncwwLGuxG2hLKZEuLQ2jDmTgWMst_xbp4LZCn758o1xUTYoLvT8d1E'; // Obtain this from OAuth2 consent flow
 
 const oauth2Client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI);
 

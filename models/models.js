@@ -112,7 +112,7 @@ const taskSchema = new Schema({
     category: {
         type: String,
         enum: ['Frequency', 'Deadline'],
-        default: 'Frequency'
+        default: 'Deadline'
     },
     client: { type: Schema.Types.ObjectId, ref: 'Client' }, // The client who created the task
     teamLeader: { type: Schema.Types.ObjectId, ref: 'TeamLeader', required: true }, // Team Leader responsible for the task
