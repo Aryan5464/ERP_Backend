@@ -150,8 +150,8 @@ const createTaskForEmployeeByTL = async (req, res) => {
 
         // Validate required fields
         if (!title || !description || !assignedEmployeeID || !teamLeaderId) {
-            return res.status(400).json({ 
-                message: 'Title, description, assigned user ID, and team leader ID are required.' 
+            return res.status(400).json({
+                message: 'Title, description, assigned user ID, and team leader ID are required.'
             });
         }
 
@@ -322,6 +322,35 @@ const getAllTasks = async (req, res) => {
     }
 };
 
+// Function to get all tasks for a specific client
+const getClientTasks = async (req, res) => {
+    const { clientId } = req.params;
+
+    try {
+        // Validate if the client exists
+        const client = await Client.findById(clientId);
+        if (!client) {
+            return res.status(404).json({ message: "Client not found" });
+        }
+
+        // Fetch tasks associated with the client
+        const tasks = await Task.find({ client: clientId })
+            .populate('client', 'name email') // Populate client details
+            .populate('teamLeader', 'name email') // Populate team leader details
+            .populate('assignedEmployees.userId', 'name email') // Populate assigned employees/teams
+            .sort({ createdAt: -1 }); // Sort tasks by creation date (newest first)
+
+        // Respond with the tasks
+        res.status(200).json({
+            message: `Tasks for client: ${client.name}`,
+            tasks
+        });
+    } catch (error) {
+        console.error('Error fetching client tasks:', error);
+        res.status(500).json({ message: 'Error fetching client tasks', error });
+    }
+};
+
 
 module.exports = {
     requestTask,
@@ -330,5 +359,6 @@ module.exports = {
     deleteTask,
     updateTaskStatus,
     getAllTasks,
-    createTaskForEmployeeByTL
+    createTaskForEmployeeByTL,
+    getClientTasks
 };

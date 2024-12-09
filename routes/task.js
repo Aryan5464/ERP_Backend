@@ -6,7 +6,8 @@ const {
     deleteTask,
     updateTaskStatus,
     getAllTasks,
-    createTaskForEmployeeByTL
+    createTaskForEmployeeByTL,
+    getClientTasks
 } = require('../controllers/task');
 
 const router = express.Router();
@@ -15,7 +16,7 @@ const router = express.Router();
 router.post('/requestTask', requestTask); // for client
 
 // Route for a team leader to get all requested tasks from their clients
-router.get('/requested-tasks', getRequestedTasksForTeamLeader); // For Team Leader
+router.post('/requested-tasks', getRequestedTasksForTeamLeader); // For Team Leader
 
 // Route for a team leader to accept or reject a requested task
 router.post('/assign-or-reject', assignOrRejectRequestedTask); // For Team Leader
@@ -29,5 +30,7 @@ router.put('/update-status', updateTaskStatus);  // Example: /task/update-status
 router.get('/allTasks', getAllTasks);
 
 router.post('/createTaskForEmployeeByTL', createTaskForEmployeeByTL)
+
+router.post('/getClientTasks', getClientTasks);
 
 module.exports = router;

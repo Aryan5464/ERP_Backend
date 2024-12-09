@@ -25,5 +25,4 @@ router.post('/dp', getAdminDP);
 router.post('/deleteDP', deleteAdminDP);
 
 
-
 module.exports = router;

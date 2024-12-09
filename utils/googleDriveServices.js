@@ -5,7 +5,7 @@ const { google } = require('googleapis');
 const CLIENT_ID = '264377568077-mv41em86lh5r1bd1svoj1i7e1n5pal3l.apps.googleusercontent.com';
 const CLIENT_SECRET = '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';
 const REDIRECT_URI = 'https://developers.google.com/oauthplayground'; // Set during Google Cloud setup
-const REFRESH_TOKEN = '1//04Mr-x59fF9fuCgYIARAAGAQSNwF-L9IruZ_lnJnMu0_e0ncwwLGuxG2hLKZEuLQ2jDmTgWMst_xbp4LZCn758o1xUTYoLvT8d1E'; // Obtain this from OAuth2 consent flow
+const REFRESH_TOKEN = '1//04PaGo7aAQ16-CgYIARAAGAQSNwF-L9IrtOm_XAF-0pIYuV9s2DWiZJJqKjIk6XriaI-t1wYug8V6rjGN5jpnUbrOugYSV9Ktn10'; // Obtain this from OAuth2 consent flow
 
 const oauth2Client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI);
 
@@ -52,6 +52,7 @@ const deleteFile = async (fileId) => {
 // Function to get the public link of a file
 const getFileLink = async (fileId) => {
   try {
+    // Set permissions to allow anyone to access the file
     await drive.permissions.create({
       fileId: fileId,
       requestBody: {
@@ -59,16 +60,31 @@ const getFileLink = async (fileId) => {
         type: 'anyone',
       },
     });
+
+    // Get the file's web links
     const result = await drive.files.get({
       fileId: fileId,
-      fields: 'webViewLink, webContentLink',
+      fields: 'webViewLink, webContentLink, id',
     });
-    console.log(result.data);
-    return result.data;
+
+    // Construct the direct link
+    const { webViewLink, webContentLink, id } = result.data;
+    const directLink = `https://drive.google.com/uc?id=${id}`;
+
+    // Return all three links
+    const links = {
+      webViewLink,
+      webContentLink,
+      directLink,
+    }
+    console.log(links);
+    return links;
   } catch (error) {
-    console.error('Error getting file link:', error);
+    console.error('Error getting file links:', error);
+    return null;
   }
 };
+
 
 
 // const uploadFileToDrive = async (folderId, file) => {

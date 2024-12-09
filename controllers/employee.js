@@ -129,7 +129,6 @@ const editEmployee = async (req, res) => {
     }
 };
 
-
 // Function to delete an Employee
 const deleteEmployee = async (req, res) => {
     try {
