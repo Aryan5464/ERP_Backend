@@ -253,8 +253,12 @@ const uploadAdminDP = async (req, res) => {
                     return res.status(404).json({ message: "Admin not found" });
                 }
 
+                // Ensure the uploads directory exists
+                const uploadsDir = path.join(__dirname, "uploads");
+                await fs.mkdir(uploadsDir, { recursive: true });
+
                 // Compress and save the image
-                const compressedImagePath = path.join(__dirname, "uploads", `${adminId}_profile.jpg`);
+                const compressedImagePath = path.join(uploadsDir, `${adminId}_profile.jpg`);
 
                 await sharp(file.filepath)
                     .resize(300, 300, { fit: "cover" }) // Resize to 300x300 (example)
@@ -287,6 +291,7 @@ const uploadAdminDP = async (req, res) => {
         res.status(500).json({ message: "Unexpected server error", error: globalError });
     }
 };
+
 
 const getAdminDP = async (req, res) => {
     try {
