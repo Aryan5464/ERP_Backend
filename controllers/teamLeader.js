@@ -524,5 +524,5 @@ module.exports = {
     getTeamLeaderTasks,
     uploadTeamLeaderDP,
     getTeamLeaderDP,
-    deleteTeamLeaderDP
+    deleteTeamLeaderDP 
 };

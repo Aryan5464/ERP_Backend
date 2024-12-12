@@ -115,35 +115,50 @@ const taskSchema = new Schema({
         default: 'Deadline'
     },
     client: { type: Schema.Types.ObjectId, ref: 'Client' }, // The client who created the task
-    teamLeader: { type: Schema.Types.ObjectId, ref: 'TeamLeader', required: true }, // Team Leader responsible for the task
+    teamLeader: { type: Schema.Types.ObjectId, ref: 'TeamLeader'}, // Team Leader responsible for the task
     assignedEmployees: [{
-        userType: { type: String, enum: ['Employee', 'TeamLeader'], required: true },
-        userId: { type: Schema.Types.ObjectId, required: true, refPath: 'assignedEmployees.userType' }
+        userType: { type: String, enum: ['Employee', 'TeamLeader']},
+        userId: { type: Schema.Types.ObjectId, refPath: 'assignedEmployees.userType' }
     }], // Employees or Team Leaders working on the task
     completedBy: {
         userType: { type: String, enum: ['Employee', 'TeamLeader'] },
         userId: { type: Schema.Types.ObjectId, refPath: 'completedBy.userType' }
     }, // Employee or Team Leader who completed the task
     dueDate: { type: Date },
+    frequency: { 
+        type: String, 
+        enum: ['Every Monday', 'Every Tuesday', 'Every 15th Day of Month', 'Every Saturday'], 
+        default: null 
+    }, 
     priority: { type: String, enum: ['Low', 'Medium', 'High'], default: 'Medium' },
     // Other relevant fields
 }, { timestamps: true });
 
 const Task = mongoose.model('Task', taskSchema);
 
-
 const requestedTask = new Schema({
     title: { type: String, required: true },
     description: { type: String, required: true },
-    client: { type: Schema.Types.ObjectId, ref: 'Client' },
-    dueDate: { type: Date, required: true }, // New dueDate field
+    client: { type: Schema.Types.ObjectId, ref: 'Client', required: true },
+    category: {
+        type: String,
+        enum: ['Frequency', 'Deadline'],
+        default: 'Deadline' 
+    },
+    frequency: { 
+        type: String, 
+        enum: ['Every Monday', 'Every Tuesday', 'Every 15th Day of Month', 'Every Saturday'], 
+        default: null 
+    }, // For frequency-based tasks
+    dueDate: { type: Date }, // For deadline-based tasks or initial occurrence for frequency tasks
     priority: { type: String, enum: ['Low', 'Medium', 'High'], default: 'Medium' },
     status: {
         type: String,
         enum: ['Accepted', 'Requested', 'Rejected'],
         default: 'Requested'
-    }
-}, { timestamps: true })
+    },
+    rejectionReason: { type: String }, 
+}, { timestamps: true });
 
 const RequestTask = mongoose.model('RequestedTask', requestedTask);
 

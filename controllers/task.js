@@ -4,11 +4,20 @@ const { RequestTask, Task, TeamLeader, Employee, Client } = require('../models/m
 // Function for a client to request a task
 const requestTask = async (req, res) => {
     try {
-        const { title, description, clientId, dueDate, priority } = req.body;
+        const { title, description, clientId, category, frequency, dueDate, priority } = req.body;
 
         // Validate required fields
-        if (!title || !description || !clientId) {
-            return res.status(400).json({ message: 'Title, description, and client ID are required.' });
+        if (!title || !description || !clientId || !category) {
+            return res.status(400).json({ message: 'Title, description, client ID, and category are required.' });
+        }
+
+        // Validate category and its related fields
+        if (category === 'Frequency' && !frequency) {
+            return res.status(400).json({ message: 'Frequency is required for Frequency-based tasks.' });
+        }
+
+        if (category === 'Deadline' && !dueDate) {
+            return res.status(400).json({ message: 'Due date is required for Deadline-based tasks.' });
         }
 
         // Create new requested task
@@ -16,7 +25,9 @@ const requestTask = async (req, res) => {
             title,
             description,
             client: clientId,
-            dueDate,
+            category,
+            frequency: category === 'Frequency' ? frequency : null, // Only set frequency for Frequency tasks
+            dueDate: category === 'Deadline' ? dueDate : null, // Only set dueDate for Deadline tasks
             priority
         });
 
@@ -29,7 +40,7 @@ const requestTask = async (req, res) => {
         });
     } catch (error) {
         console.error('Error requesting task:', error);
-        res.status(500).json({ message: 'Server error' });
+        res.status(500).json({ message: 'Server error', error });
     }
 };
 
