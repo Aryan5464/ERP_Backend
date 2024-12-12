@@ -7,6 +7,7 @@ const { getOrCreateFolder, uploadFileToDrive, getFileLink, deleteFile } = requir
 const formidable = require("formidable");
 const sharp = require("sharp");
 const fs = require("fs/promises");
+const path = require("path"); // Import the path module
 
 
 // Function to create a new Admin

@@ -100,6 +100,33 @@ const clientSchema = new Schema({
 
 const Client = mongoose.model('Client', clientSchema);
 
+
+const requestedTask = new Schema({
+    title: { type: String, required: true },
+    description: { type: String, required: true },
+    client: { type: Schema.Types.ObjectId, ref: 'Client', required: true },
+    category: {
+        type: String,
+        enum: ['Frequency', 'Deadline'],
+        default: 'Deadline' 
+    },
+    frequency: { 
+        type: String, 
+        enum: ['Every Monday', 'Every Tuesday', 'Every 15th Day of Month', 'Every Saturday'], 
+        default: null 
+    }, // For frequency-based tasks
+    dueDate: { type: Date }, // For deadline-based tasks or initial occurrence for frequency tasks
+    priority: { type: String, enum: ['Low', 'Medium', 'High'], default: 'Medium' },
+    status: {
+        type: String,
+        enum: ['Accepted', 'Requested', 'Rejected'],
+        default: 'Requested'
+    },
+    rejectionReason: { type: String }, 
+}, { timestamps: true });
+
+const RequestTask = mongoose.model('RequestedTask', requestedTask);
+
 // Task Schema
 const taskSchema = new Schema({
     title: { type: String, required: true },
@@ -135,32 +162,6 @@ const taskSchema = new Schema({
 }, { timestamps: true });
 
 const Task = mongoose.model('Task', taskSchema);
-
-const requestedTask = new Schema({
-    title: { type: String, required: true },
-    description: { type: String, required: true },
-    client: { type: Schema.Types.ObjectId, ref: 'Client', required: true },
-    category: {
-        type: String,
-        enum: ['Frequency', 'Deadline'],
-        default: 'Deadline' 
-    },
-    frequency: { 
-        type: String, 
-        enum: ['Every Monday', 'Every Tuesday', 'Every 15th Day of Month', 'Every Saturday'], 
-        default: null 
-    }, // For frequency-based tasks
-    dueDate: { type: Date }, // For deadline-based tasks or initial occurrence for frequency tasks
-    priority: { type: String, enum: ['Low', 'Medium', 'High'], default: 'Medium' },
-    status: {
-        type: String,
-        enum: ['Accepted', 'Requested', 'Rejected'],
-        default: 'Requested'
-    },
-    rejectionReason: { type: String }, 
-}, { timestamps: true });
-
-const RequestTask = mongoose.model('RequestedTask', requestedTask);
 
 
 const notificationSchema = new Schema({
