@@ -222,6 +222,138 @@ const updateAdminPassword = async (req, res) => {
 };
 
 
+// const uploadAdminDP = async (req, res) => {
+//     try {
+//         const form = new formidable.IncomingForm({
+//             multiples: false,
+//             keepExtensions: true,
+//         });
+
+//         form.parse(req, async (err, fields, files) => {
+//             if (err) {
+//                 console.error("Form parsing error:", err);
+//                 return res.status(500).json({ message: "Error parsing form", error: err });
+//             }
+
+//             const fileArray = files.image;
+//             const file = Array.isArray(fileArray) ? fileArray[0] : fileArray;
+
+//             if (!file || !file.filepath) {
+//                 return res.status(400).json({ message: "Image file is required or invalid" });
+//             }
+
+//             try {
+//                 const { adminId } = fields;
+//                 if (!adminId) {
+//                     return res.status(400).json({ message: "Admin ID is required" });
+//                 }
+
+//                 const admin = await Admin.findById(adminId);
+//                 if (!admin) {
+//                     return res.status(404).json({ message: "Admin not found" });
+//                 }
+
+//                 // Ensure the uploads directory exists
+//                 const uploadsDir = path.join(__dirname, "uploads");
+//                 await fs.mkdir(uploadsDir, { recursive: true });
+
+//                 // Compress and save the image
+//                 const compressedImagePath = path.join(uploadsDir, `${adminId}_profile.jpg`);
+
+//                 await sharp(file.filepath)
+//                     .resize(300, 300, { fit: "cover" }) // Resize to 300x300 (example)
+//                     .jpeg({ quality: 80 }) // Compress with 80% quality
+//                     .toFile(compressedImagePath);
+
+//                 // Update admin profile picture path
+//                 admin.dp = compressedImagePath;
+//                 await admin.save();
+
+//                 res.json({
+//                     message: "Image uploaded and compressed successfully",
+//                     filePath: compressedImagePath,
+//                 });
+//             } catch (error) {
+//                 console.error("Error processing image:", error);
+//                 res.status(500).json({ message: "Error processing image", error });
+//             } finally {
+//                 try {
+//                     if (file.filepath) {
+//                         await fs.unlink(file.filepath);
+//                     }
+//                 } catch (cleanupError) {
+//                     console.error("Error cleaning up temp file:", cleanupError);
+//                 }
+//             }
+//         });
+//     } catch (globalError) {
+//         console.error("Unexpected server error:", globalError);
+//         res.status(500).json({ message: "Unexpected server error", error: globalError });
+//     }
+// };
+
+
+// const getAdminDP = async (req, res) => {
+//     try {
+//         const { adminId } = req.body;
+//         if (!adminId) {
+//             return res.status(400).json({ message: "Admin ID is required" });
+//         }
+
+//         const admin = await Admin.findById(adminId);
+//         if (!admin) {
+//             return res.status(404).json({ message: "Admin not found" });
+//         }
+
+//         if (!admin.dp) {
+//             return res.status(404).json({ message: "Profile image not found for Admin" });
+//         }
+
+//         res.sendFile(admin.dp, { root: "." }, (err) => {
+//             if (err) {
+//                 console.error("Error sending image file:", err);
+//                 res.status(500).json({ message: "Error retrieving image file" });
+//             }
+//         });
+//     } catch (error) {
+//         console.error("Error fetching Admin profile image:", error);
+//         res.status(500).json({ message: "Unexpected server error", error });
+//     }
+// };
+
+// const deleteAdminDP = async (req, res) => {
+//     try {
+//         const { adminId } = req.body;
+//         if (!adminId) {
+//             return res.status(400).json({ message: "Admin ID is required" });
+//         }
+
+//         const admin = await Admin.findById(adminId);
+//         if (!admin) {
+//             return res.status(404).json({ message: "Admin not found" });
+//         }
+
+//         if (!admin.dp) {
+//             return res.status(404).json({ message: "Profile image not found for Admin" });
+//         }
+
+//         try {
+//             await fs.unlink(admin.dp);
+//         } catch (error) {
+//             console.error("Error deleting file:", error);
+//             return res.status(500).json({ message: "Error deleting image file", error });
+//         }
+
+//         admin.dp = null;
+//         await admin.save();
+
+//         res.json({ message: "Admin profile image deleted successfully" });
+//     } catch (error) {
+//         console.error("Unexpected server error:", error);
+//         res.status(500).json({ message: "Unexpected server error", error });
+//     }
+// };
+
 const uploadAdminDP = async (req, res) => {
     try {
         const form = new formidable.IncomingForm({
@@ -243,6 +375,10 @@ const uploadAdminDP = async (req, res) => {
             }
 
             try {
+                const adminFolderId = await getOrCreateFolder("Admin");
+                const imageFolderId = await getOrCreateFolder("image", adminFolderId);
+                const fileId = await uploadFileToDrive(imageFolderId, file);
+
                 const { adminId } = fields;
                 if (!adminId) {
                     return res.status(400).json({ message: "Admin ID is required" });
@@ -253,29 +389,16 @@ const uploadAdminDP = async (req, res) => {
                     return res.status(404).json({ message: "Admin not found" });
                 }
 
-                // Ensure the uploads directory exists
-                const uploadsDir = path.join(__dirname, "uploads");
-                await fs.mkdir(uploadsDir, { recursive: true });
-
-                // Compress and save the image
-                const compressedImagePath = path.join(uploadsDir, `${adminId}_profile.jpg`);
-
-                await sharp(file.filepath)
-                    .resize(300, 300, { fit: "cover" }) // Resize to 300x300 (example)
-                    .jpeg({ quality: 80 }) // Compress with 80% quality
-                    .toFile(compressedImagePath);
-
-                // Update admin profile picture path
-                admin.dp = compressedImagePath;
+                admin.dp = fileId;
                 await admin.save();
 
                 res.json({
-                    message: "Image uploaded and compressed successfully",
-                    filePath: compressedImagePath,
+                    message: "Image uploaded successfully",
+                    fileId,
                 });
-            } catch (error) {
-                console.error("Error processing image:", error);
-                res.status(500).json({ message: "Error processing image", error });
+            } catch (uploadError) {
+                console.error("Error uploading image:", uploadError);
+                res.status(500).json({ message: "Error uploading image", error: uploadError });
             } finally {
                 try {
                     if (file.filepath) {
@@ -291,7 +414,6 @@ const uploadAdminDP = async (req, res) => {
         res.status(500).json({ message: "Unexpected server error", error: globalError });
     }
 };
-
 
 const getAdminDP = async (req, res) => {
     try {
@@ -309,11 +431,15 @@ const getAdminDP = async (req, res) => {
             return res.status(404).json({ message: "Profile image not found for Admin" });
         }
 
-        res.sendFile(admin.dp, { root: "." }, (err) => {
-            if (err) {
-                console.error("Error sending image file:", err);
-                res.status(500).json({ message: "Error retrieving image file" });
-            }
+        const fileLink = await getFileLink(admin.dp);
+        if (!fileLink) {
+            return res.status(500).json({ message: "Error fetching image link from Google Drive" });
+        }
+
+        res.json({
+            message: "Profile image retrieved successfully",
+            webViewLink: fileLink.webViewLink,
+            webContentLink: fileLink.webContentLink,
         });
     } catch (error) {
         console.error("Error fetching Admin profile image:", error);
@@ -337,11 +463,12 @@ const deleteAdminDP = async (req, res) => {
             return res.status(404).json({ message: "Profile image not found for Admin" });
         }
 
+        const fileId = admin.dp;
+
         try {
-            await fs.unlink(admin.dp);
+            await deleteFile(fileId);
         } catch (error) {
-            console.error("Error deleting file:", error);
-            return res.status(500).json({ message: "Error deleting image file", error });
+            return res.status(500).json({ message: "Error deleting file from Google Drive", error });
         }
 
         admin.dp = null;
@@ -349,12 +476,9 @@ const deleteAdminDP = async (req, res) => {
 
         res.json({ message: "Admin profile image deleted successfully" });
     } catch (error) {
-        console.error("Unexpected server error:", error);
         res.status(500).json({ message: "Unexpected server error", error });
     }
 };
-
-
 
 
 module.exports = {

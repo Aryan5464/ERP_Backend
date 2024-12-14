@@ -101,31 +101,32 @@ const clientSchema = new Schema({
 const Client = mongoose.model('Client', clientSchema);
 
 
-const requestedTask = new Schema({
+const requestedTaskSchema = new Schema({
     title: { type: String, required: true },
     description: { type: String, required: true },
     client: { type: Schema.Types.ObjectId, ref: 'Client', required: true },
     category: {
         type: String,
         enum: ['Frequency', 'Deadline'],
-        default: 'Deadline' 
+        default: 'Deadline'
     },
     frequency: { 
         type: String, 
         enum: ['Every Monday', 'Every Tuesday', 'Every 15th Day of Month', 'Every Saturday'], 
         default: null 
-    }, // For frequency-based tasks
-    dueDate: { type: Date }, // For deadline-based tasks or initial occurrence for frequency tasks
+    }, // Only for frequency-based tasks
+    dueDate: { type: Date }, // Only for deadline-based tasks
     priority: { type: String, enum: ['Low', 'Medium', 'High'], default: 'Medium' },
     status: {
         type: String,
         enum: ['Accepted', 'Requested', 'Rejected'],
         default: 'Requested'
     },
-    rejectionReason: { type: String }, 
+    rejectionReason: { type: String }, // Optional
 }, { timestamps: true });
 
-const RequestTask = mongoose.model('RequestedTask', requestedTask);
+
+const RequestTask = mongoose.model('RequestedTask', requestedTaskSchema);
 
 // Task Schema
 const taskSchema = new Schema({
@@ -141,27 +142,42 @@ const taskSchema = new Schema({
         enum: ['Frequency', 'Deadline'],
         default: 'Deadline'
     },
-    client: { type: Schema.Types.ObjectId, ref: 'Client' }, // The client who created the task
-    teamLeader: { type: Schema.Types.ObjectId, ref: 'TeamLeader'}, // Team Leader responsible for the task
-    assignedEmployees: [{
-        userType: { type: String, enum: ['Employee', 'TeamLeader']},
-        userId: { type: Schema.Types.ObjectId, refPath: 'assignedEmployees.userType' }
-    }], // Employees or Team Leaders working on the task
-    completedBy: {
-        userType: { type: String, enum: ['Employee', 'TeamLeader'] },
-        userId: { type: Schema.Types.ObjectId, refPath: 'completedBy.userType' }
-    }, // Employee or Team Leader who completed the task
+    client: { type: Schema.Types.ObjectId, ref: 'Client' },
+    assignedTo: { 
+        userType: { type: String, enum: ['Employee', 'TeamLeader'], required: true },
+        userId: { type: Schema.Types.ObjectId, refPath: 'assignedTo.userType' }
+    },
     dueDate: { type: Date },
     frequency: { 
         type: String, 
         enum: ['Every Monday', 'Every Tuesday', 'Every 15th Day of Month', 'Every Saturday'], 
         default: null 
-    }, 
+    }, // Only set if this is a frequency-based task
     priority: { type: String, enum: ['Low', 'Medium', 'High'], default: 'Medium' },
-    // Other relevant fields
+    parentTaskId: { type: Schema.Types.ObjectId, ref: 'Task' }, // Reference for frequency tasks
 }, { timestamps: true });
 
 const Task = mongoose.model('Task', taskSchema);
+
+
+const recurringTaskSchema = new Schema({
+    title: { type: String, required: true },
+    description: { type: String, required: true },
+    client: { type: Schema.Types.ObjectId, ref: 'Client', required: true },
+    frequency: { 
+        type: String, 
+        enum: ['Every Monday', 'Every Tuesday', 'Every 15th Day of Month', 'Every Saturday'], 
+        required: true 
+    },
+    assignedTo: { 
+        userType: { type: String, enum: ['Employee', 'TeamLeader'], required: true },
+        userId: { type: Schema.Types.ObjectId, refPath: 'assignedTo.userType' }
+    },
+    priority: { type: String, enum: ['Low', 'Medium', 'High'], default: 'Medium' },
+    active: { type: Boolean, default: true }, // Toggle for recurring tasks
+}, { timestamps: true });
+
+const RecurringTask = mongoose.model('RecurringTask', recurringTaskSchema);
 
 
 const notificationSchema = new Schema({
@@ -181,8 +197,9 @@ module.exports = {
     TeamLeader,
     Employee,
     Client,
-    Task,
     RequestTask,
+    Task,
+    RecurringTask,
     Notification
 };
 

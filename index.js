@@ -14,7 +14,8 @@ const TLroutes = require('./routes/teamLeader')
 const employeeRoutes = require('./routes/employee');
 const seedSuperAdmin = require('./db/seedSuperAdmin');
 const clientRoutes = require('./routes/client')
-const taskRoutes = require('./routes/task')
+const taskRoutes = require('./routes/task');
+const { restartCronJobs } = require('./controllers/task');
 
 
 app.get('/', (req, res) => {
@@ -28,6 +29,7 @@ app.use('/employee', employeeRoutes);
 app.use('/client', clientRoutes);
 app.use('/task', taskRoutes);
 
+restartCronJobs();
 seedSuperAdmin();
 
 app.listen(3000, () => {
