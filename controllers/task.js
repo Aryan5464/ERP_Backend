@@ -555,25 +555,23 @@ const getAllTasks = async (req, res) => {
         // Fetch all tasks from the database
         const tasks = await Task.find()
             .populate('client', 'name email companyName') // Populate client details
-            .populate('teamLeader', 'name email') // Populate team leader details
-            .populate('assignedEmployees.userId', 'name email') // Populate assigned employees/teams
-            .populate('completedBy.userId', 'name email') // Populate completedBy details
+            .populate('assignedTo.userId', 'name email') // Populate assigned user details
             .sort({ createdAt: -1 }); // Sort by creation date (newest first)
 
         if (!tasks.length) {
             return res.status(404).json({ message: 'No tasks found.' });
         }
 
-        // Return the tasks to the admin
         res.status(200).json({
             message: 'All tasks fetched successfully.',
             tasks
         });
     } catch (error) {
         console.error('Error fetching tasks:', error);
-        res.status(500).json({ message: 'Server error while fetching tasks.', error });
+        res.status(500).json({ message: 'Server error while fetching tasks.', error: error.message });
     }
 };
+
 
 // Function to get all tasks for a specific client
 const getClientTasks = async (req, res) => {
