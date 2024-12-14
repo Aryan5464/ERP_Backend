@@ -20,7 +20,7 @@ router.delete('/delete', verifyAuthToken, deleteClient);
 
 router.get('/all', getAllClients);
 
-router.get('/getClientsForTeamLeader', getClientsForTeamLeader);
+router.post('/getClientsForTeamLeader', getClientsForTeamLeader);
 
 // Route for uploading client documents
 router.post('/upload-documents', uploadDocuments);
