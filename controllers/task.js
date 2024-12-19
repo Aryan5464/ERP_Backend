@@ -6,6 +6,8 @@ const cronJobs = {}; // This stores active cron jobs by their task ID.
 
 const getCronExpressionFromFrequency = (frequency) => {
     switch (frequency) {
+        case 'systum':
+            return "55 3 * * *"
         case 'Every Monday':
             return '0 0 * * 1'; // Every Monday at midnight
         case 'Every Tuesday':
@@ -16,6 +18,45 @@ const getCronExpressionFromFrequency = (frequency) => {
             return '0 0 * * 6'; // Every Saturday at midnight
         default:
             return null;
+    }
+};
+
+const scheduleCronJob = async (recurringTask) => {
+    const cronExpression = getCronExpressionFromFrequency(recurringTask.frequency);
+
+    if (cronExpression) {
+        const job = cron.schedule(cronExpression, async () => {
+            try {
+                const newTask = new Task({
+                    title: recurringTask.title,
+                    description: recurringTask.description,
+                    client: recurringTask.client,
+                    category: 'Frequency',
+                    assignedTo: recurringTask.assignedTo,
+                    priority: recurringTask.priority,
+                    parentTaskId: recurringTask._id,
+                    dueDate: new Date() // Optional: Adjust logic to set a meaningful due date
+                });
+
+                const savedTask = await newTask.save();
+
+                await Promise.all([
+                    Client.findByIdAndUpdate(recurringTask.client, { $push: { tasks: savedTask._id } }),
+                    recurringTask.assignedTo.userType === 'Employee'
+                        ? Employee.findByIdAndUpdate(recurringTask.assignedTo.userId, { $push: { tasks: savedTask._id } })
+                        : TeamLeader.findByIdAndUpdate(recurringTask.assignedTo.userId, { $push: { tasks: savedTask._id } })
+                ]);
+
+                console.log(`Task created and references updated via cron job: ${savedTask._id}`);
+            } catch (error) {
+                console.error('Error creating task via cron job:', error);
+            }
+        });
+
+        cronJobs[recurringTask._id] = job;
+        console.log(`Cron job scheduled for recurring task: ${recurringTask._id}`);
+    } else {
+        console.warn(`Invalid frequency for recurring task: ${recurringTask._id}`);
     }
 };
 
@@ -37,19 +78,6 @@ const requestTask = async (req, res) => {
             if (!frequency) {
                 return res.status(400).json({
                     message: 'Frequency is required for Frequency-based tasks.',
-                });
-            }
-
-            // Validate frequency value
-            const validFrequencies = [
-                'Every Monday',
-                'Every Tuesday',
-                'Every 15th Day of Month',
-                'Every Saturday',
-            ];
-            if (!validFrequencies.includes(frequency)) {
-                return res.status(400).json({
-                    message: `Invalid frequency. Allowed values: ${validFrequencies.join(', ')}`,
                 });
             }
         } else if (category === 'Deadline') {
@@ -142,9 +170,9 @@ const getRequestedTasksForTeamLeader = async (req, res) => {
         });
     }
 };
-
+ 
+ 
 const acceptTask = async (requestedTask, assignedUserId, assignedUserType) => {
-    // Validate assigned user details
     if (!assignedUserId || !assignedUserType) {
         throw new Error('Assigned user ID and user type are required for accepting the task.');
     }
@@ -153,7 +181,6 @@ const acceptTask = async (requestedTask, assignedUserId, assignedUserType) => {
         throw new Error('Assigned user type must be "Employee" or "TeamLeader".');
     }
 
-    // Handle Deadline tasks
     if (requestedTask.category === 'Deadline') {
         const newTask = new Task({
             title: requestedTask.title,
@@ -172,7 +199,6 @@ const acceptTask = async (requestedTask, assignedUserId, assignedUserType) => {
 
         await newTask.save();
 
-        // Update related entities
         await Promise.all([
             Client.findByIdAndUpdate(requestedTask.client, { $push: { tasks: newTask._id } }),
             assignedUserType === 'Employee'
@@ -183,7 +209,6 @@ const acceptTask = async (requestedTask, assignedUserId, assignedUserType) => {
         return newTask;
     }
 
-    // Handle Frequency tasks
     if (requestedTask.category === 'Frequency') {
         const newRecurringTask = new RecurringTask({
             title: requestedTask.title,
@@ -199,42 +224,7 @@ const acceptTask = async (requestedTask, assignedUserId, assignedUserType) => {
         });
 
         const savedRecurringTask = await newRecurringTask.save();
-
-        // Schedule the cron job
-        const cronExpression = getCronExpressionFromFrequency(savedRecurringTask.frequency);
-        if (cronExpression) {
-            const job = cron.schedule(cronExpression, async () => {
-                try {
-                    const newTask = new Task({
-                        title: savedRecurringTask.title,
-                        description: savedRecurringTask.description,
-                        client: savedRecurringTask.client,
-                        category: 'Frequency',
-                        assignedTo: savedRecurringTask.assignedTo,
-                        priority: savedRecurringTask.priority,
-                        parentTaskId: savedRecurringTask._id,
-                        dueDate: new Date() // Optional: Calculate meaningful due date if needed
-                    });
-
-                    const savedTask = await newTask.save();
-
-                    // Update related entities with the new task ID
-                    await Promise.all([
-                        Client.findByIdAndUpdate(savedRecurringTask.client, { $push: { tasks: savedTask._id } }),
-                        savedRecurringTask.assignedTo.userType === 'Employee'
-                            ? Employee.findByIdAndUpdate(savedRecurringTask.assignedTo.userId, { $push: { tasks: savedTask._id } })
-                            : TeamLeader.findByIdAndUpdate(savedRecurringTask.assignedTo.userId, { $push: { tasks: savedTask._id } })
-                    ]);
-
-                    console.log(`Task created and references updated via cron job: ${savedTask._id}`);
-                } catch (error) {
-                    console.error('Error creating task via cron job:', error);
-                }
-            });
-
-            cronJobs[savedRecurringTask._id] = job;
-        }
-
+        await scheduleCronJob(savedRecurringTask);
         return savedRecurringTask;
     }
 
@@ -315,14 +305,12 @@ const createTaskByTL = async (req, res) => {
             assignedUserType
         } = req.body;
 
-        // Validate required fields
         if (!title || !description || !clientId || !category || !assignedUserId || !assignedUserType) {
             return res.status(400).json({
                 message: 'Title, description, client ID, category, assigned user ID, and user type are required.'
             });
         }
 
-        // Validate category and related fields
         if (category === 'Frequency' && !frequency) {
             return res.status(400).json({
                 message: 'Frequency is required for frequency-based tasks.'
@@ -335,14 +323,12 @@ const createTaskByTL = async (req, res) => {
             });
         }
 
-        // Validate assigned user type
         if (!['Employee', 'TeamLeader'].includes(assignedUserType)) {
             return res.status(400).json({
                 message: 'Assigned user type must be "Employee" or "TeamLeader".'
             });
         }
 
-        // Handle Deadline tasks
         if (category === 'Deadline') {
             const newTask = new Task({
                 title,
@@ -358,10 +344,8 @@ const createTaskByTL = async (req, res) => {
                 status: 'Active'
             });
 
-            // Save the task
             await newTask.save();
 
-            // Update related entities
             await Promise.all([
                 Client.findByIdAndUpdate(clientId, { $push: { tasks: newTask._id } }),
                 assignedUserType === 'Employee'
@@ -375,7 +359,6 @@ const createTaskByTL = async (req, res) => {
             });
         }
 
-        // Handle Frequency tasks
         if (category === 'Frequency') {
             const newRecurringTask = new RecurringTask({
                 title,
@@ -391,44 +374,7 @@ const createTaskByTL = async (req, res) => {
             });
 
             const savedRecurringTask = await newRecurringTask.save();
-
-            // Schedule the cron job
-            const cronExpression = getCronExpressionFromFrequency(frequency);
-            if (cronExpression) {
-                const job = cron.schedule(cronExpression, async () => {
-                    try {
-                        const newTask = new Task({
-                            title: savedRecurringTask.title,
-                            description: savedRecurringTask.description,
-                            client: savedRecurringTask.client,
-                            category: 'Frequency',
-                            assignedTo: savedRecurringTask.assignedTo,
-                            priority: savedRecurringTask.priority,
-                            parentTaskId: savedRecurringTask._id,
-                            dueDate: new Date() // Optional: Set a meaningful due date if needed
-                        });
-
-                        // Save the new task
-                        const savedTask = await newTask.save();
-
-                        // Update related entities with the new task ID
-                        await Promise.all([
-                            Client.findByIdAndUpdate(savedRecurringTask.client, { $push: { tasks: savedTask._id } }),
-                            savedRecurringTask.assignedTo.userType === 'Employee'
-                                ? Employee.findByIdAndUpdate(savedRecurringTask.assignedTo.userId, { $push: { tasks: savedTask._id } })
-                                : TeamLeader.findByIdAndUpdate(savedRecurringTask.assignedTo.userId, { $push: { tasks: savedTask._id } })
-                        ]);
-
-                        console.log(`Task created and references updated: ${savedTask._id}`);
-                    } catch (error) {
-                        console.error('Error creating task via cron job:', error);
-                    }
-                });
-
-                // Save the cron job reference
-                cronJobs[savedRecurringTask._id] = job;
-            }
-
+            await scheduleCronJob(savedRecurringTask);
 
             return res.status(201).json({
                 message: 'Frequency task created successfully and scheduled.',
@@ -447,6 +393,7 @@ const createTaskByTL = async (req, res) => {
         });
     }
 };
+
 
 
 const deleteTask = async (req, res) => {
@@ -648,67 +595,15 @@ const deleteOrDeactivateRecurringTask = async (req, res) => {
     }
 };
 
-
-
-
-
-
-
-
-
-
-
 // Function to restart cron jobs on server restart
 const restartCronJobs = async () => {
     try {
         console.log('Restarting cron jobs...');
 
-        // Fetch all active recurring tasks
         const recurringTasks = await RecurringTask.find({ active: true });
 
-        // Loop through each task and restart its cron job
         for (const recurringTask of recurringTasks) {
-            const cronExpression = getCronExpressionFromFrequency(recurringTask.frequency);
-
-            if (cronExpression) {
-                // Schedule the cron job
-                const job = cron.schedule(cronExpression, async () => {
-                    try {
-                        // Create a new task based on the recurring task details
-                        const newTask = new Task({
-                            title: recurringTask.title,
-                            description: recurringTask.description,
-                            client: recurringTask.client,
-                            category: 'Frequency',
-                            assignedTo: recurringTask.assignedTo,
-                            priority: recurringTask.priority,
-                            parentTaskId: recurringTask._id,
-                            dueDate: new Date(), // Set the due date to now or based on your logic
-                        });
-
-                        await newTask.save();
-
-                        // Update related entities (client, user)
-                        const { userType, userId } = recurringTask.assignedTo;
-                        await Promise.all([
-                            Client.findByIdAndUpdate(recurringTask.client, { $push: { tasks: newTask._id } }),
-                            userType === 'Employee'
-                                ? Employee.findByIdAndUpdate(userId, { $push: { tasks: newTask._id } })
-                                : TeamLeader.findByIdAndUpdate(userId, { $push: { tasks: newTask._id } }),
-                        ]);
-
-                        console.log(`Task created from recurring task: ${recurringTask._id}`);
-                    } catch (error) {
-                        console.error(`Error creating task for recurring task ${recurringTask._id}:`, error);
-                    }
-                });
-
-                // Store the job in the cronJobs object
-                cronJobs[recurringTask._id] = job;
-                console.log(`Cron job restarted for recurring task: ${recurringTask._id}`);
-            } else {
-                console.warn(`Invalid frequency for recurring task: ${recurringTask._id}`);
-            }
+            await scheduleCronJob(recurringTask);
         }
 
         console.log('All cron jobs restarted successfully.');
@@ -727,7 +622,5 @@ module.exports = {
     createTaskByTL,
     getClientTasks,
     deleteOrDeactivateRecurringTask,
-
-
     restartCronJobs
 };
