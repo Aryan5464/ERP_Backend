@@ -8,7 +8,10 @@ const {
     getClientTasks,
     createTaskByTL,
     acceptOrRejectTask,
-    deleteOrDeactivateRecurringTask
+    deleteOrDeactivateRecurringTask,
+    getAllRecurringTasks,
+    getTasksByAssignedUser,
+    getRecurringTasksByClient
 } = require('../controllers/task');
 
 const router = express.Router();
@@ -33,6 +36,15 @@ router.put('/update-status', updateTaskStatus);  // Example: /task/update-status
 router.get('/allTasks', getAllTasks);
 
 router.post('/getClientTasks', getClientTasks);
+
+
+// Recurring Task functions-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+router.get('/getAllRecurringTasks', getAllRecurringTasks);
+
+router.post('/getTasksByAssignedUser', getTasksByAssignedUser);
+
+router.post('getRecurringTasksByClient', getRecurringTasksByClient);
 
 router.post('/deleteOrDeactivateRecurringTask', deleteOrDeactivateRecurringTask);
 

@@ -170,8 +170,8 @@ const getRequestedTasksForTeamLeader = async (req, res) => {
         });
     }
 };
- 
- 
+
+
 const acceptTask = async (requestedTask, assignedUserId, assignedUserType) => {
     if (!assignedUserId || !assignedUserType) {
         throw new Error('Assigned user ID and user type are required for accepting the task.');
@@ -523,7 +523,7 @@ const getAllTasks = async (req, res) => {
 // Function to get all tasks for a specific client
 const getClientTasks = async (req, res) => {
     try {
-        const { clientId } = req.params;
+        const { clientId } = req.body;
 
         // Validate clientId parameter
         if (!clientId) {
@@ -553,6 +553,61 @@ const getClientTasks = async (req, res) => {
         res.status(500).json({ message: 'Error fetching client tasks.', error });
     }
 };
+
+
+// Recurring Task Functions -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+const getAllRecurringTasks = async (req, res) => {
+    try {
+        // Fetch all recurring tasks from the database
+        const recurringTasks = await RecurringTask.find()
+            .populate('client', 'name email companyName') // Populate client details
+            .populate('assignedTo.userId', 'name email') // Populate assigned user details
+            .sort({ createdAt: -1 }); // Sort by creation date (newest first)
+
+        if (!recurringTasks.length) {
+            return res.status(404).json({ message: 'No recurring tasks found.' });
+        }
+
+        res.status(200).json({
+            message: 'All recurring tasks fetched successfully.',
+            recurringTasks
+        });
+    } catch (error) {
+        console.error('Error fetching recurring tasks:', error);
+        res.status(500).json({ message: 'Server error while fetching recurring tasks.', error: error.message });
+    }
+};
+
+const getTasksByAssignedUser = async (req, res) => {
+    try {
+        const { userId } = req.body;
+
+        // Validate if the userId is provided
+        if (!userId) {
+            return res.status(400).json({ message: 'User ID is required.' });
+        }
+
+        // Find tasks assigned to the specific userId
+        const tasks = await Task.find({ 'assignedTo.userId': userId })
+            .populate('client', 'name email companyName') // Populate client details
+            .populate('assignedTo.userId', 'name email') // Populate assigned user details
+            .sort({ createdAt: -1 }); // Sort tasks by creation date (newest first)
+
+        if (!tasks.length) {
+            return res.status(404).json({ message: 'No tasks found for the specified user.' });
+        }
+
+        res.status(200).json({
+            message: `Tasks assigned to user: ${userId} fetched successfully.`,
+            tasks
+        });
+    } catch (error) {
+        console.error('Error fetching tasks for assigned user:', error);
+        res.status(500).json({ message: 'Server error while fetching tasks.', error: error.message });
+    }
+};
+
 
 const deleteOrDeactivateRecurringTask = async (req, res) => {
     try {
@@ -595,6 +650,36 @@ const deleteOrDeactivateRecurringTask = async (req, res) => {
     }
 };
 
+const getRecurringTasksByClient = async (req, res) => {
+    try {
+        const { clientId } = req.body;
+
+        // Validate if clientId is provided
+        if (!clientId) {
+            return res.status(400).json({ message: 'Client ID is required.' });
+        }
+
+        // Fetch recurring tasks associated with the client
+        const recurringTasks = await RecurringTask.find({ client: clientId })
+            .populate('client', 'name email companyName') // Populate client details
+            .populate('assignedTo.userId', 'name email') // Populate assigned user details
+            .sort({ createdAt: -1 }); // Sort by creation date (newest first)
+
+        if (!recurringTasks.length) {
+            return res.status(404).json({ message: 'No recurring tasks found for the specified client.' });
+        }
+
+        res.status(200).json({
+            message: `Recurring tasks for client: ${clientId} fetched successfully.`,
+            recurringTasks
+        });
+    } catch (error) {
+        console.error('Error fetching recurring tasks:', error);
+        res.status(500).json({ message: 'Server error while fetching recurring tasks.', error: error.message });
+    }
+};
+
+
 // Function to restart cron jobs on server restart
 const restartCronJobs = async () => {
     try {
@@ -621,6 +706,12 @@ module.exports = {
     getAllTasks,
     createTaskByTL,
     getClientTasks,
+
+
+    // Recurring Tasks 
+    getAllRecurringTasks,
+    getTasksByAssignedUser,
     deleteOrDeactivateRecurringTask,
-    restartCronJobs
+    getRecurringTasksByClient,
+    restartCronJobs,
 };

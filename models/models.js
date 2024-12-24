@@ -175,7 +175,7 @@ const recurringTaskSchema = new Schema({
     },
     priority: { type: String, enum: ['Low', 'Medium', 'High'], default: 'Medium' },
     active: { type: Boolean, default: true }, // Toggle for recurring tasks
-}, { timestamps: true });
+}, { timestamps: true });                                          
 
 const RecurringTask = mongoose.model('RecurringTask', recurringTaskSchema);
 
