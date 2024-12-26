@@ -37,12 +37,12 @@ router.get('/allTasks', getAllTasks);
 
 router.post('/getClientTasks', getClientTasks);
 
+router.post('/getTasksByAssignedUser', getTasksByAssignedUser);
 
 // Recurring Task functions-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 router.get('/getAllRecurringTasks', getAllRecurringTasks);
 
-router.post('/getTasksByAssignedUser', getTasksByAssignedUser);
 
 router.post('getRecurringTasksByClient', getRecurringTasksByClient);
 

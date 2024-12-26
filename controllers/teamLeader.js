@@ -386,6 +386,40 @@ const getTeamLeaderTasks = async (req, res) => {
     }
 };
 
+
+const getTeamLeaderDetails = async (req, res) => {
+    try {
+        const { teamLeaderId } = req.body;
+
+        // Validate the teamLeaderId
+        if (!teamLeaderId) {
+            return res.status(400).json({ message: 'Team Leader ID is required.' });
+        }
+
+        // Find the Team Leader and populate the relevant details
+        const teamLeader = await TeamLeader.findById(teamLeaderId)
+            .populate('tasks', 'title description status category dueDate priority') // Populate tasks details
+            .populate('employees', 'name email phone') // Populate employees under the team leader
+            .populate('clients', 'name email companyName') // Populate clients associated with the team leader
+            .populate('admin', 'name email'); // Populate admin details if required
+
+        // If no Team Leader found, return 404
+        if (!teamLeader) {
+            return res.status(404).json({ message: 'Team Leader not found.' });
+        }
+
+        // Send the team leader details
+        res.status(200).json({
+            message: 'Team Leader details fetched successfully.',
+            teamLeader
+        });
+    } catch (error) {
+        console.error('Error fetching Team Leader details:', error);
+        res.status(500).json({ message: 'Server error while fetching Team Leader details.', error: error.message });
+    }
+};
+
+
 const uploadTeamLeaderDP = async (req, res) => {
     try {
         const form = new formidable.IncomingForm({
@@ -522,6 +556,7 @@ module.exports = {
     deleteTeamLeaderAndPromoteEmployee,
     getTeamLeaderHierarchy,
     getTeamLeaderTasks,
+    getTeamLeaderDetails,
     uploadTeamLeaderDP,
     getTeamLeaderDP,
     deleteTeamLeaderDP 

@@ -1,5 +1,6 @@
 const express = require('express');
-const { createTeamLeader, editTeamLeader, loginTeamLeader, getTeamLeaderHierarchy, getTeamLeaderTasks, deleteTeamLeaderWithReassignment, deleteTeamLeaderAndPromoteEmployee, uploadTeamLeaderDP, getTeamLeaderDP, deleteTeamLeaderDP } = require('../controllers/teamLeader'); // Import the controller functions
+const { createTeamLeader, editTeamLeader, loginTeamLeader, getTeamLeaderHierarchy, getTeamLeaderTasks, deleteTeamLeaderWithReassignment, deleteTeamLeaderAndPromoteEmployee, uploadTeamLeaderDP, getTeamLeaderDP, deleteTeamLeaderDP, getTeamLeaderDetails } = require('../controllers/teamLeader');
+// Import the controller functions
 const verifyAuthToken = require('../middleware/authMiddleware'); // Import the auth middleware 
 
 const router = express.Router();
@@ -18,6 +19,8 @@ router.delete('/deleteTeamLeaderAndPromoteEmployee', deleteTeamLeaderAndPromoteE
 router.post('/hierarchy', getTeamLeaderHierarchy);
 
 router.get('/teamLeaderTasks', getTeamLeaderTasks);
+
+router.post('/getTeamLeaderDetails', getTeamLeaderDetails);
 
 router.post('/uploadDP', uploadTeamLeaderDP);
 
