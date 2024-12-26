@@ -389,7 +389,7 @@ const getTeamLeaderTasks = async (req, res) => {
 
 const getTeamLeaderDetails = async (req, res) => {
     try {
-        const { teamLeaderId } = req.params;
+        const { teamLeaderId } = req.body;
 
         // Validate the teamLeaderId
         if (!teamLeaderId) {
