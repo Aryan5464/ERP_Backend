@@ -389,7 +389,7 @@ const getTeamLeaderTasks = async (req, res) => {
 
 const getTeamLeaderDetails = async (req, res) => {
     try {
-        const { teamLeaderId } = req.body;
+        const { teamLeaderId } = req.params;
 
         // Validate the teamLeaderId
         if (!teamLeaderId) {
@@ -398,7 +398,14 @@ const getTeamLeaderDetails = async (req, res) => {
 
         // Find the Team Leader and populate the relevant details
         const teamLeader = await TeamLeader.findById(teamLeaderId)
-            .populate('tasks', 'title description status category dueDate priority') // Populate tasks details
+            .populate({
+                path: 'tasks',
+                select: 'title description status category dueDate frequency priority client assignedTo', // Select all important fields
+                populate: [
+                    { path: 'client', select: 'name email companyName' }, // Populate client details in tasks
+                    { path: 'assignedTo.userId', select: 'name email' }, // Populate assigned user details
+                ],
+            })
             .populate('employees', 'name email phone') // Populate employees under the team leader
             .populate('clients', 'name email companyName') // Populate clients associated with the team leader
             .populate('admin', 'name email'); // Populate admin details if required
@@ -411,7 +418,7 @@ const getTeamLeaderDetails = async (req, res) => {
         // Send the team leader details
         res.status(200).json({
             message: 'Team Leader details fetched successfully.',
-            teamLeader
+            teamLeader,
         });
     } catch (error) {
         console.error('Error fetching Team Leader details:', error);
