@@ -179,15 +179,16 @@ const recurringTaskSchema = new Schema({
 
 const RecurringTask = mongoose.model('RecurringTask', recurringTaskSchema);
 
-
 const notificationSchema = new Schema({
-    recipient: { type: Schema.Types.ObjectId, refPath: 'recipientType', required: true }, 
-    recipientType: { type: String, enum: ['SuperAdmin', 'Admin', 'TeamLeader', 'Employee', 'Client'], required: true },
-    title: { type: String, required: true },
+    userId: { type: mongoose.Schema.Types.ObjectId, required: true },
+    userType: { type: String, enum: ['Admin', 'TeamLeader', 'Employee', 'Client'], required: true },
     message: { type: String, required: true },
-    isRead: { type: Boolean, default: false },
-    readAt: { type: Date } // Date when the notification was read (if applicable)
-}, { timestamps: true }); // Automatically includes createdAt and updatedAt
+    status: { type: String, enum: ['read', 'unread'], default: 'unread' },
+    readAt: { type: Date, default: null }, // Added field for storing the timestamp when read
+    type: { type: String, enum: ['alert', 'message', 'system'], default: 'message' },
+    priority: { type: String, enum: ['high', 'medium', 'low'], default: 'low' },
+}, { timestamps: true });
+
 const Notification = mongoose.model('Notification', notificationSchema);
 
 
@@ -202,19 +203,3 @@ module.exports = {
     RecurringTask,
     Notification
 };
-
- 
-
-
-
-////////////////////// attributes that can be added to to the Notification Schema
-    // actionRequired: { type: Boolean, default: false }, // Indicates if an action is required from the recipient
-    // relatedTask: { type: Schema.Types.ObjectId, ref: 'Task' }, // Optional: Reference to the related task
-    // relatedClient: { type: Schema.Types.ObjectId, ref: 'Client' }, // Optional: Reference to the related client
-    // sender: { type: Schema.Types.ObjectId, refPath: 'senderType' }, // Optional: sender of the notification
-    // senderType: { type: String, enum: ['SuperAdmin', 'Admin', 'TeamLeader', 'Employee', 'Client'] }, // Specifies the model for the sender
-    // type: { 
-    //     type: String, 
-    //     enum: ['TaskAssignment', 'TaskUpdate', 'ClientRequest', 'ClientApproval', 'Reminder', 'General'],
-    //     required: true 
-    // }, // Type of notification

@@ -15,6 +15,7 @@ const employeeRoutes = require('./routes/employee');
 const seedSuperAdmin = require('./db/seedSuperAdmin');
 const clientRoutes = require('./routes/client')
 const taskRoutes = require('./routes/task');
+const notificationRoutes = require('./routes/notification');
 const { restartCronJobs } = require('./controllers/task');
 
 
@@ -28,6 +29,7 @@ app.use('/teamLeader', TLroutes);
 app.use('/employee', employeeRoutes);
 app.use('/client', clientRoutes);
 app.use('/task', taskRoutes);
+app.use('/notification', notificationRoutes);
 
 restartCronJobs();
 seedSuperAdmin();

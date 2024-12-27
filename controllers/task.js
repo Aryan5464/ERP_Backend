@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const cron = require('node-cron');
 const { RequestTask, Task, TeamLeader, Employee, Client, RecurringTask } = require('../models/models');
+const { addNotification } = require('./notification');
 
 const cronJobs = {}; // This stores active cron jobs by their task ID.
 
@@ -46,6 +47,20 @@ const scheduleCronJob = async (recurringTask) => {
                         ? Employee.findByIdAndUpdate(recurringTask.assignedTo.userId, { $push: { tasks: savedTask._id } })
                         : TeamLeader.findByIdAndUpdate(recurringTask.assignedTo.userId, { $push: { tasks: savedTask._id } })
                 ]);
+
+                // Add notification for the newly created recurring task instance
+                try {
+                    const notificationMessage = `New task "${recurringTask.title}" has been assigned to you by Team Leader.`;
+
+                    await addNotification(
+                        recurringTask.assignedTo.userId,
+                        recurringTask.assignedTo.userType,
+                        notificationMessage
+                    );
+                } catch (notificationError) {
+                    console.error('Error sending notification for recurring task:', notificationError);
+                    // Continue execution even if notification fails
+                }
 
                 console.log(`Task created and references updated via cron job: ${savedTask._id}`);
             } catch (error) {
@@ -206,6 +221,20 @@ const acceptTask = async (requestedTask, assignedUserId, assignedUserType) => {
                 : TeamLeader.findByIdAndUpdate(assignedUserId, { $push: { tasks: newTask._id } })
         ]);
 
+
+        const formattedDueDate = new Date(dueDate).toLocaleDateString();
+        const notificationMessage = `New task "${title}" has been assigned to you by Team Leader. Due date: ${formattedDueDate}`;
+        try {
+            await addNotification(
+                assignedUserId,
+                assignedUserType,
+                notificationMessage
+            );
+        } catch (notificationError) {
+            console.error('Error sending notification:', notificationError);
+            // Continue with the function even if notification fails
+        }
+
         return newTask;
     }
 
@@ -353,6 +382,21 @@ const createTaskByTL = async (req, res) => {
                     : TeamLeader.findByIdAndUpdate(assignedUserId, { $push: { tasks: newTask._id } })
             ]);
 
+            // Add notification for deadline task
+            try {
+                const formattedDueDate = new Date(dueDate).toLocaleDateString();
+                const notificationMessage = `New task "${title}" has been assigned to you by Team Leader. Due date: ${formattedDueDate}`;
+
+                await addNotification(
+                    assignedUserId,
+                    assignedUserType,
+                    notificationMessage
+                );
+            } catch (notificationError) {
+                console.error('Error sending notification:', notificationError);
+                // Continue with the function even if notification fails
+            }
+
             return res.status(201).json({
                 message: 'Deadline task created successfully.',
                 task: newTask
@@ -393,8 +437,6 @@ const createTaskByTL = async (req, res) => {
         });
     }
 };
-
-
 
 const deleteTask = async (req, res) => {
     try {

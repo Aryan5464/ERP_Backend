@@ -1,0 +1,217 @@
+{
+    "info": {
+        "name": "Notification System API",
+        "description": "API collection for the notification system",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "Get All Notifications",
+            "request": {
+                "method": "POST",
+                "url": "{{base_url}}/notification/get-all",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": {
+                        "userId": "65a65a6c52e99e89f788ec9e"
+                    }
+                }
+            },
+            "response": [
+                {
+                    "status": "200",
+                    "body": {
+                        "success": true,
+                        "count": 2,
+                        "data": [
+                            {
+                                "_id": "notification123",
+                                "userId": "65a65a6c52e99e89f788ec9e",
+                                "userType": "Employee",
+                                "message": "First notification",
+                                "type": "message",
+                                "priority": "medium",
+                                "status": "unread",
+                                "readAt": null,
+                                "createdAt": "2024-01-20T10:00:00.000Z",
+                                "updatedAt": "2024-01-20T10:00:00.000Z"
+                            },
+                            {
+                                "_id": "notification124",
+                                "userId": "65a65a6c52e99e89f788ec9e",
+                                "userType": "Employee",
+                                "message": "Second notification",
+                                "type": "alert",
+                                "priority": "high",
+                                "status": "read",
+                                "readAt": "2024-01-20T11:00:00.000Z",
+                                "createdAt": "2024-01-20T10:30:00.000Z",
+                                "updatedAt": "2024-01-20T11:00:00.000Z"
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Mark Read",
+            "request": {
+                "method": "POST",
+                "url": "{{base_url}}/notification/mark-read",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": {
+                        "notificationId": "65a65a6c52e99e89f788ec9e"
+                    }
+                }
+            },
+            "response": [
+                {
+                    "status": "200",
+                    "body": {
+                        "success": true,
+                        "data": {
+                            "_id": "65a65a6c52e99e89f788ec9e",
+                            "status": "read",
+                            "readAt": "2024-01-20T12:00:00.000Z"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Mark Unread",
+            "request": {
+                "method": "POST",
+                "url": "{{base_url}}/notification/mark-unread",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": {
+                        "notificationId": "65a65a6c52e99e89f788ec9e"
+                    }
+                }
+            },
+            "response": [
+                {
+                    "status": "200",
+                    "body": {
+                        "success": true,
+                        "data": {
+                            "_id": "65a65a6c52e99e89f788ec9e",
+                            "status": "unread",
+                            "readAt": null
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Mark All Read",
+            "request": {
+                "method": "POST",
+                "url": "{{base_url}}/notification/mark-all-read",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": {
+                        "userId": "65a65a6c52e99e89f788ec9e"
+                    }
+                }
+            },
+            "response": [
+                {
+                    "status": "200",
+                    "body": {
+                        "success": true,
+                        "message": "5 notifications marked as read"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Delete One Notification",
+            "request": {
+                "method": "DELETE",
+                "url": "{{base_url}}/notification/delete-one",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": {
+                        "notificationId": "65a65a6c52e99e89f788ec9e"
+                    }
+                }
+            },
+            "response": [
+                {
+                    "status": "200",
+                    "body": {
+                        "success": true,
+                        "message": "Notification deleted successfully"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Delete All Notifications",
+            "request": {
+                "method": "DELETE",
+                "url": "{{base_url}}/notification/delete-all",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": {
+                        "userId": "65a65a6c52e99e89f788ec9e"
+                    }
+                }
+            },
+            "response": [
+                {
+                    "status": "200",
+                    "body": {
+                        "success": true,
+                        "message": "All notifications deleted successfully"
+                    }
+                }
+            ]
+        }
+    ],
+    "variable": [
+        {
+            "key": "base_url",
+            "value": "http://localhost:3000"
+        }
+    ]
+}
