@@ -517,11 +517,7 @@ const updateTaskStatus = async (req, res) => {
             taskId,
             { status, updatedAt: new Date() }, // Update status and timestamp
             { new: true } // Returns the updated document
-        )
-            .populate('client', 'name email')
-            .populate('teamLeader', 'name email')
-            .populate('assignedEmployees.userId', 'name email')
-            .populate('completedBy.userId', 'name email');
+        ) 
 
         if (!updatedTask) {
             return res.status(404).json({ message: 'Task not found.' });

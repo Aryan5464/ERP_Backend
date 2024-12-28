@@ -191,6 +191,33 @@ const notificationSchema = new Schema({
 
 const Notification = mongoose.model('Notification', notificationSchema);
 
+const messageSchema = new Schema({
+    sender: { 
+        type: Schema.Types.ObjectId,
+        required: true,
+        refPath: 'senderType'
+    },
+    senderType: {
+        type: String,
+        required: true,
+        enum: ['TeamLeader', 'Client']
+    },
+    receiver: { 
+        type: Schema.Types.ObjectId,
+        required: true,
+        refPath: 'receiverType'
+    },
+    receiverType: {
+        type: String,
+        required: true,
+        enum: ['TeamLeader', 'Client']
+    },
+    content: { type: String, required: true },
+    read: { type: Boolean, default: false },
+}, { timestamps: true });
+
+const Message = mongoose.model('Message', messageSchema);
+
 
 module.exports = {
     SuperAdmin,
