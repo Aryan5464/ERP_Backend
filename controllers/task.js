@@ -354,16 +354,30 @@ const createTaskByTL = async (req, res) => {
             dueDate,
             priority,
             assignedUserId,
-            assignedUserType,
-            teamLeaderId
+            assignedUserType
         } = req.body;
 
-
-        if (!title || !description || !clientId || !category || !assignedUserId || !assignedUserType || !teamLeaderId) {
+        if (!title || !description || !clientId || !category || !assignedUserId || !assignedUserType) {
             return res.status(400).json({
-                message: 'Title, description, client ID, category, assigned user ID, user type, and team leader ID are required.'
+                message: 'Title, description, client ID, category, assigned user ID, and user type are required.'
             });
         }
+
+        // Get client details to fetch teamLeaderId
+        const client = await Client.findById(clientId);
+        if (!client) {
+            return res.status(404).json({
+                message: 'Client not found'
+            });
+        }
+
+        if (!client.teamLeader) {
+            return res.status(400).json({
+                message: 'No team leader assigned to this client'
+            });
+        }
+
+        const teamLeaderId = client.teamLeader;
 
         if (category === 'Frequency' && !frequency) {
             return res.status(400).json({
@@ -400,7 +414,6 @@ const createTaskByTL = async (req, res) => {
 
             await newTask.save();
 
-            // Modified Promise.all to always update TeamLeader's tasks
             await Promise.all([
                 Client.findByIdAndUpdate(clientId, { $push: { tasks: newTask._id } }),
                 TeamLeader.findByIdAndUpdate(teamLeaderId, { $push: { tasks: newTask._id } }),
@@ -409,7 +422,6 @@ const createTaskByTL = async (req, res) => {
                     : [])
             ]);
 
-            // Add notification for deadline task
             try {
                 const formattedDueDate = new Date(dueDate).toLocaleDateString();
                 const notificationMessage = `New task "${title}" has been assigned to you by Team Leader. Due date: ${formattedDueDate}`;
