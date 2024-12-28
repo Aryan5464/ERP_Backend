@@ -354,12 +354,14 @@ const createTaskByTL = async (req, res) => {
             dueDate,
             priority,
             assignedUserId,
-            assignedUserType
+            assignedUserType,
+            teamLeaderId
         } = req.body;
 
-        if (!title || !description || !clientId || !category || !assignedUserId || !assignedUserType) {
+
+        if (!title || !description || !clientId || !category || !assignedUserId || !assignedUserType || !teamLeaderId) {
             return res.status(400).json({
-                message: 'Title, description, client ID, category, assigned user ID, and user type are required.'
+                message: 'Title, description, client ID, category, assigned user ID, user type, and team leader ID are required.'
             });
         }
 
@@ -402,8 +404,7 @@ const createTaskByTL = async (req, res) => {
             await Promise.all([
                 Client.findByIdAndUpdate(clientId, { $push: { tasks: newTask._id } }),
                 TeamLeader.findByIdAndUpdate(teamLeaderId, { $push: { tasks: newTask._id } }),
-                // Only update Employee's tasks if assigned to an employee
-                ...(assignedUserType === 'Employee'
+                ...(assignedUserType === 'Employee' 
                     ? [Employee.findByIdAndUpdate(assignedUserId, { $push: { tasks: newTask._id } })]
                     : [])
             ]);
