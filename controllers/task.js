@@ -28,6 +28,14 @@ const scheduleCronJob = async (recurringTask) => {
     if (cronExpression) {
         const job = cron.schedule(cronExpression, async () => {
             try {
+                // Get client details to fetch teamLeaderId
+                const client = await Client.findById(recurringTask.client);
+                if (!client || !client.teamLeader) {
+                    throw new Error('Client not found or no team leader assigned');
+                }
+
+                const teamLeaderId = client.teamLeader;
+
                 const newTask = new Task({
                     title: recurringTask.title,
                     description: recurringTask.description,
@@ -41,16 +49,19 @@ const scheduleCronJob = async (recurringTask) => {
 
                 const savedTask = await newTask.save();
 
+                // Modified Promise.all to always update TeamLeader's tasks
                 await Promise.all([
                     Client.findByIdAndUpdate(recurringTask.client, { $push: { tasks: savedTask._id } }),
-                    recurringTask.assignedTo.userType === 'Employee'
-                        ? Employee.findByIdAndUpdate(recurringTask.assignedTo.userId, { $push: { tasks: savedTask._id } })
-                        : TeamLeader.findByIdAndUpdate(recurringTask.assignedTo.userId, { $push: { tasks: savedTask._id } })
+                    TeamLeader.findByIdAndUpdate(teamLeaderId, { $push: { tasks: savedTask._id } }),
+                    // Only update Employee's tasks if assigned to an employee
+                    ...(recurringTask.assignedTo.userType === 'Employee'
+                        ? [Employee.findByIdAndUpdate(recurringTask.assignedTo.userId, { $push: { tasks: savedTask._id } })]
+                        : [])
                 ]);
 
                 // Add notification for the newly created recurring task instance
                 try {
-                    const notificationMessage = `New task "${recurringTask.title}" has been assigned to you by Team Leader.`;
+                    const notificationMessage = `New recurring task "${recurringTask.title}" has been automatically created and assigned to you.`;
 
                     await addNotification(
                         recurringTask.assignedTo.userId,
@@ -196,6 +207,18 @@ const acceptTask = async (requestedTask, assignedUserId, assignedUserType) => {
         throw new Error('Assigned user type must be "Employee" or "TeamLeader".');
     }
 
+    // Get client details to fetch teamLeaderId
+    const client = await Client.findById(requestedTask.client);
+    if (!client) {
+        throw new Error('Client not found');
+    }
+
+    if (!client.teamLeader) {
+        throw new Error('No team leader assigned to this client');
+    }
+
+    const teamLeaderId = client.teamLeader;
+
     if (requestedTask.category === 'Deadline') {
         const newTask = new Task({
             title: requestedTask.title,
@@ -216,15 +239,16 @@ const acceptTask = async (requestedTask, assignedUserId, assignedUserType) => {
 
         await Promise.all([
             Client.findByIdAndUpdate(requestedTask.client, { $push: { tasks: newTask._id } }),
-            assignedUserType === 'Employee'
-                ? Employee.findByIdAndUpdate(assignedUserId, { $push: { tasks: newTask._id } })
-                : TeamLeader.findByIdAndUpdate(assignedUserId, { $push: { tasks: newTask._id } })
+            TeamLeader.findByIdAndUpdate(teamLeaderId, { $push: { tasks: newTask._id } }),
+            ...(assignedUserType === 'Employee'
+                ? [Employee.findByIdAndUpdate(assignedUserId, { $push: { tasks: newTask._id } })]
+                : [])
         ]);
 
-
-        const formattedDueDate = new Date(dueDate).toLocaleDateString();
-        const notificationMessage = `New task "${title}" has been assigned to you by Team Leader. Due date: ${formattedDueDate}`;
         try {
+            const formattedDueDate = new Date(requestedTask.dueDate).toLocaleDateString();
+            const notificationMessage = `New task "${requestedTask.title}" has been assigned to you by Team Leader. Due date: ${formattedDueDate}`;
+
             await addNotification(
                 assignedUserId,
                 assignedUserType,
@@ -253,7 +277,7 @@ const acceptTask = async (requestedTask, assignedUserId, assignedUserType) => {
         });
 
         const savedRecurringTask = await newRecurringTask.save();
-        await scheduleCronJob(savedRecurringTask);
+        await scheduleCronJob(savedRecurringTask, teamLeaderId); // Passing teamLeaderId to scheduleCronJob
         return savedRecurringTask;
     }
 
@@ -289,7 +313,6 @@ const acceptOrRejectTask = async (req, res) => {
             return res.status(404).json({ message: 'Requested task not found.' });
         }
 
-        // Check if the task is already processed
         if (requestedTask.status !== 'Requested') {
             return res.status(400).json({ message: 'Task has already been processed.' });
         }
@@ -375,11 +398,14 @@ const createTaskByTL = async (req, res) => {
 
             await newTask.save();
 
+            // Modified Promise.all to always update TeamLeader's tasks
             await Promise.all([
                 Client.findByIdAndUpdate(clientId, { $push: { tasks: newTask._id } }),
-                assignedUserType === 'Employee'
-                    ? Employee.findByIdAndUpdate(assignedUserId, { $push: { tasks: newTask._id } })
-                    : TeamLeader.findByIdAndUpdate(assignedUserId, { $push: { tasks: newTask._id } })
+                TeamLeader.findByIdAndUpdate(teamLeaderId, { $push: { tasks: newTask._id } }),
+                // Only update Employee's tasks if assigned to an employee
+                ...(assignedUserType === 'Employee'
+                    ? [Employee.findByIdAndUpdate(assignedUserId, { $push: { tasks: newTask._id } })]
+                    : [])
             ]);
 
             // Add notification for deadline task
@@ -517,7 +543,7 @@ const updateTaskStatus = async (req, res) => {
             taskId,
             { status, updatedAt: new Date() }, // Update status and timestamp
             { new: true } // Returns the updated document
-        ) 
+        )
 
         if (!updatedTask) {
             return res.status(404).json({ message: 'Task not found.' });

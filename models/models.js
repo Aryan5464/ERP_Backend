@@ -154,7 +154,7 @@ const taskSchema = new Schema({
         default: null 
     }, // Only set if this is a frequency-based task
     priority: { type: String, enum: ['Low', 'Medium', 'High'], default: 'Medium' },
-    parentTaskId: { type: Schema.Types.ObjectId, ref: 'Task' }, // Reference for frequency tasks
+    parentTaskId: { type: Schema.Types.ObjectId, ref: 'Task' }, // Reference for frequency tasks  
 }, { timestamps: true });
 
 const Task = mongoose.model('Task', taskSchema);
@@ -228,5 +228,6 @@ module.exports = {
     RequestTask,
     Task,
     RecurringTask,
-    Notification
+    Notification,
+    Message
 };
