@@ -1,4 +1,7 @@
 const express = require('express');
+const cron = require('node-cron');
+const { Task } = require('../models/models');
+
 const {
     requestTask,
     getRequestedTasksForTeamLeader,
@@ -47,5 +50,45 @@ router.get('/getAllRecurringTasks', getAllRecurringTasks);
 router.post('getRecurringTasksByClient', getRecurringTasksByClient);
 
 router.post('/deleteOrDeactivateRecurringTask', deleteOrDeactivateRecurringTask);
+
+
+
+
+
+
+// Function to update overdue tasks
+const updateOverdueTasks = async () => {
+    try {
+        const currentDate = new Date();
+
+        // Find and update all tasks that are:
+        // 1. Past their due date
+        // 2. Have status either 'Active' or 'Work in Progress'
+        const result = await Task.updateMany(
+            {
+                dueDate: { $lt: currentDate },
+                status: { $in: ['Active', 'Work in Progress'] },
+            },
+            {
+                $set: {
+                    status: 'Pending',
+                    updatedAt: currentDate
+                }
+            }
+        );
+
+        console.log(`Updated ${result.modifiedCount} overdue tasks to Pending status`);
+
+    } catch (error) {
+        console.error('Error in updateOverdueTasks cron job:', error);
+    }
+};
+
+cron.schedule('*/30 * * * *', () => {
+    console.log('Running task status update cron job...');
+    updateOverdueTasks();
+});
+
+updateOverdueTasks();
 
 module.exports = router;
