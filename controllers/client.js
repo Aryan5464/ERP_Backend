@@ -156,6 +156,48 @@ const onboardClient = async (req, res) => {
     }
 };
 
+const getClientDetails = async (req, res) => {
+    try {
+        const { clientId } = req.body;
+
+        // Validate client ID
+        if (!clientId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Client ID is required'
+            });
+        }
+
+        // Find client and populate essential relations
+        const client = await Client.findById(clientId)
+            .populate('teamLeader', 'name email contactNumber')
+            .populate('tasks', 'title description status dueDate priority')
+            .select('-password'); // Exclude password from response
+
+        // Check if client exists
+        if (!client) {
+            return res.status(404).json({
+                success: false,
+                message: 'Client not found'
+            });
+        }
+
+        // Send successful response
+        res.status(200).json({
+            success: true,
+            data: client
+        });
+
+    } catch (error) {
+        console.error('Error fetching client details:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching client details'
+        });
+    }
+};
+
+
 
 const editClient = async (req, res) => {
     try {
@@ -566,6 +608,7 @@ module.exports = {
     signupClient,
     loginClient,
     onboardClient,
+    getClientDetails,
     editClient,
     deleteClient,
     getAllClients,
