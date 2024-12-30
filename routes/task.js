@@ -54,8 +54,6 @@ router.post('/deleteOrDeactivateRecurringTask', deleteOrDeactivateRecurringTask)
 
 
 
-
-
 // Function to update overdue tasks
 const updateOverdueTasks = async () => {
     try {
