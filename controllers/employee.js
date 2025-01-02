@@ -173,17 +173,28 @@ const getEmployeeTasks = async (req, res) => {
 
         // Fetch tasks where the employee is assigned
         const tasks = await Task.find({
-            "assignedEmployees.userType": "Employee",
-            "assignedEmployees.userId": employeeId
-        }).populate('client', 'name').populate('assignedEmployees.userId', 'name');
+            'assignedTo.userType': 'Employee',
+            'assignedTo.userId': employeeId
+        })
+        .populate('client', 'name')  // Populate client information
+        .populate('assignedTo.userId', 'name')  // Populate assigned user's information
+        .populate('parentTaskId')  // Optionally populate parent task if it exists
+        .sort({ createdAt: -1 });  // Sort by creation date, newest first
 
         res.status(200).json({
+            success: true,
             message: 'Tasks fetched successfully',
+            count: tasks.length,
             tasks
         });
+
     } catch (error) {
         console.error('Error fetching tasks for employee:', error);
-        res.status(500).json({ message: 'Server error' });
+        res.status(500).json({ 
+            success: false,
+            message: 'Error fetching tasks',
+            error: error.message 
+        });
     }
 };
  
