@@ -4,8 +4,8 @@ const { google } = require('googleapis');
 
 const CLIENT_ID = '264377568077-mv41em86lh5r1bd1svoj1i7e1n5pal3l.apps.googleusercontent.com';
 const CLIENT_SECRET = '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';
-const REDIRECT_URI = 'https://developers.google.com/oauthplayground'; // Set during Google Cloud setup
-const REFRESH_TOKEN = '1//04PaGo7aAQ16-CgYIARAAGAQSNwF-L9IrtOm_XAF-0pIYuV9s2DWiZJJqKjIk6XriaI-t1wYug8V6rjGN5jpnUbrOugYSV9Ktn10'; // Obtain this from OAuth2 consent flow
+const REDIRECT_URI = 'https://developers.google.com/oauthplayground'; 
+const REFRESH_TOKEN = '1//04PaGo7aAQ16-CgYIARAAGAQSNwF-L9IrtOm_XAF-0pIYuV9s2DWiZJJqKjIk6XriaI-t1wYug8V6rjGN5jpnUbrOugYSV9Ktn10';  
 
 const oauth2Client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI);
 

@@ -1,6 +1,6 @@
 const express = require('express');
 const verifyAuthToken = require('../middleware/authMiddleware');
-const { onboardClient, signupClient, loginClient, editClient, deleteClient, getAllClients, getClientsForTeamLeader, uploadDocuments, getDocLinks, uploadClientDP, getClientDP, deleteClientDP, getClientDetails } = require('../controllers/client');
+const { onboardClient, signupClient, loginClient, editClient, deleteClient, getAllClients, getClientsForTeamLeader, uploadDocuments, getDocLinks, getClientDetails } = require('../controllers/client');
 const router = express.Router();
 
 // Client signup route
@@ -28,11 +28,5 @@ router.post('/getClientsForTeamLeader', getClientsForTeamLeader);
 router.post('/upload-documents', uploadDocuments);
 
 router.post('/getDocLinks', getDocLinks);
-
-router.post('/uploadDP', uploadClientDP);
-
-router.post('/dp', getClientDP);
-
-router.post('/deleteDP', deleteClientDP);
 
 module.exports = router;

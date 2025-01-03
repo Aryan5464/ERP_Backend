@@ -1,5 +1,4 @@
 // controllers/employeeController.js
-
 const {Employee, TeamLeader, Task} = require('../models/models');
 const { hashPassword, comparePasswords } = require('../utils/bcryptUtils');
 const { generateToken } = require('../utils/jwtUtils');
@@ -198,139 +197,11 @@ const getEmployeeTasks = async (req, res) => {
     }
 };
  
-const uploadEmployeeDP = async (req, res) => {
-    try {
-        const form = new formidable.IncomingForm({
-            multiples: false,
-            keepExtensions: true,
-        });
-
-        form.parse(req, async (err, fields, files) => {
-            if (err) {
-                console.error("Form parsing error:", err);
-                return res.status(500).json({ message: "Error parsing form", error: err });
-            }
-
-            const fileArray = files.image;
-            const file = Array.isArray(fileArray) ? fileArray[0] : fileArray;
-
-            if (!file || !file.filepath) {
-                return res.status(400).json({ message: "Image file is required or invalid" });
-            }
-
-            try {
-                const employeeFolderId = await getOrCreateFolder("Employee");
-                const imageFolderId = await getOrCreateFolder("image", employeeFolderId);
-                const fileId = await uploadFileToDrive(imageFolderId, file);
-
-                const { employeeId } = fields;
-                if (!employeeId) {
-                    return res.status(400).json({ message: "Employee ID is required" });
-                }
-
-                const employee = await Employee.findById(employeeId);
-                if (!employee) {
-                    return res.status(404).json({ message: "Employee not found" });
-                }
-
-                employee.dp = fileId;
-                await employee.save();
-
-                res.json({
-                    message: "Image uploaded successfully",
-                    fileId,
-                });
-            } catch (uploadError) {
-                console.error("Error uploading image:", uploadError);
-                res.status(500).json({ message: "Error uploading image", error: uploadError });
-            } finally {
-                try {
-                    if (file.filepath) {
-                        await fs.unlink(file.filepath);
-                    }
-                } catch (cleanupError) {
-                    console.error("Error cleaning up temp file:", cleanupError);
-                }
-            }
-        });
-    } catch (globalError) {
-        console.error("Unexpected server error:", globalError);
-        res.status(500).json({ message: "Unexpected server error", error: globalError });
-    }
-};
-
-const getEmployeeDP = async (req, res) => {
-    try {
-        const { employeeId } = req.body;
-        if (!employeeId) {
-            return res.status(400).json({ message: "Employee ID is required" });
-        }
-
-        const employee = await Employee.findById(employeeId);
-        if (!employee) {
-            return res.status(404).json({ message: "Employee not found" });
-        }
-
-        if (!employee.dp) {
-            return res.status(404).json({ message: "Profile image not found for Employee" });
-        }
-
-        const fileLink = await getFileLink(employee.dp);
-        if (!fileLink) {
-            return res.status(500).json({ message: "Error fetching image link from Google Drive" });
-        }
-
-        res.json({
-            message: "Profile image retrieved successfully",
-            webViewLink: fileLink.webViewLink,
-            webContentLink: fileLink.webContentLink,
-        });
-    } catch (error) {
-        console.error("Error fetching Employee profile image:", error);
-        res.status(500).json({ message: "Unexpected server error", error });
-    }
-};
- 
-const deleteEmployeeDP = async (req, res) => {
-    try {
-        const { employeeId } = req.body;
-        if (!employeeId) {
-            return res.status(400).json({ message: "Employee ID is required" });
-        }
-
-        const employee = await Employee.findById(employeeId);
-        if (!employee) {
-            return res.status(404).json({ message: "Employee not found" });
-        }
-
-        if (!employee.dp) {
-            return res.status(404).json({ message: "Profile image not found for Employee" });
-        }
-
-        const fileId = employee.dp;
-
-        try {
-            await deleteFile(fileId);
-        } catch (error) {
-            return res.status(500).json({ message: "Error deleting file from Google Drive", error });
-        }
-
-        employee.dp = null;
-        await employee.save();
-
-        res.json({ message: "Employee profile image deleted successfully" });
-    } catch (error) {
-        res.status(500).json({ message: "Unexpected server error", error });
-    }
-};
 
 module.exports = {
     createEmployee,
     loginEmployee,
     editEmployee,
     deleteEmployee,
-    getEmployeeTasks,
-    uploadEmployeeDP,
-    getEmployeeDP,
-    deleteEmployeeDP
+    getEmployeeTasks
 };
