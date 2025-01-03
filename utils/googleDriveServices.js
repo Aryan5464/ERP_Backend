@@ -2,26 +2,41 @@ const fs = require('fs');
 const path = require('path');
 const { google } = require('googleapis');
 
-const CLIENT_ID = '264377568077-mv41em86lh5r1bd1svoj1i7e1n5pal3l.apps.googleusercontent.com';
-const CLIENT_SECRET = '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';
-const REDIRECT_URI = 'https://developers.google.com/oauthplayground'; 
-const REFRESH_TOKEN = '1//04PaGo7aAQ16-CgYIARAAGAQSNwF-L9IrtOm_XAF-0pIYuV9s2DWiZJJqKjIk6XriaI-t1wYug8V6rjGN5jpnUbrOugYSV9Ktn10';  
+// Configuration object
+const config = {
+  CLIENT_ID: '264377568077-mv41em86lh5r1bd1svoj1i7e1n5pal3l.apps.googleusercontent.com',
+  CLIENT_SECRET: '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',
+  REDIRECT_URI: 'https://developers.google.com/oauthplayground',
+  REFRESH_TOKEN: '1//04kyqmxiYNRQLCgYIARAAGAQSNwF-L9Iru3lC8MsLeH0iTyZ32dM-8pxKJ-fyjhjDXIY-HNhCzAvt0L_xRdnL66KtbxQSjRWYft4'
+};
 
-const oauth2Client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI);
+// Initialize Google Drive API
+const initializeDrive = () => {
+  const oauth2Client = new google.auth.OAuth2(
+    config.CLIENT_ID,
+    config.CLIENT_SECRET,
+    config.REDIRECT_URI
+  );
 
-oauth2Client.setCredentials({ refresh_token: REFRESH_TOKEN });
+  oauth2Client.setCredentials({ refresh_token: config.REFRESH_TOKEN });
 
-const drive = google.drive({
-  version: 'v3',
-  auth: oauth2Client,
-});
+  return google.drive({
+    version: 'v3',
+    auth: oauth2Client,
+  });
+};
 
-// Function to upload a file
+const drive = initializeDrive();
+
 const uploadFile = async (filePath, mimeType) => {
   try {
+    if (!fs.existsSync(filePath)) {
+      throw new Error('File does not exist');
+    }
+
     const response = await drive.files.create({
       requestBody: {
-        name: path.basename(filePath), // File name on Google Drive
+        name: path.basename(filePath),
         mimeType: mimeType,
       },
       media: {
@@ -30,29 +45,26 @@ const uploadFile = async (filePath, mimeType) => {
       },
     });
 
-    console.log(response.data);
     return response.data;
   } catch (error) {
-    console.error('Error uploading the file:', error);
+    console.error('Error uploading file:', error.message);
+    throw error;
   }
 };
 
-// Function to delete a file by ID
 const deleteFile = async (fileId) => {
   try {
-    await drive.files.delete({
-      fileId: fileId,
-    });
-    console.log('File deleted successfully.');
+    await drive.files.delete({ fileId });
+    return true;
   } catch (error) {
-    console.error('Error deleting the file:', error);
+    console.error('Error deleting file:', error.message);
+    throw error;
   }
 };
 
-// Function to get the public link of a file
 const getFileLink = async (fileId) => {
   try {
-    // Set permissions to allow anyone to access the file
+    // Set file permissions to public
     await drive.permissions.create({
       fileId: fileId,
       requestBody: {
@@ -61,132 +73,93 @@ const getFileLink = async (fileId) => {
       },
     });
 
-    // Get the file's web links
+    // Get file links
     const result = await drive.files.get({
       fileId: fileId,
       fields: 'webViewLink, webContentLink, id',
     });
 
-    // Construct the direct link
-    const { webViewLink, webContentLink, id } = result.data;
-    const directLink = `https://drive.google.com/uc?id=${id}`;
-
-    // Return all three links
-    const links = {
-      webViewLink,
-      webContentLink,
-      directLink,
-    }
-    console.log(links);
-    return links;
+    return {
+      webViewLink: result.data.webViewLink,
+      webContentLink: result.data.webContentLink,
+      directLink: `https://drive.google.com/uc?id=${result.data.id}`,
+    };
   } catch (error) {
-    console.error('Error getting file links:', error);
-    return null;
-  }
-};
-
-
-
-// const uploadFileToDrive = async (folderId, file) => {
-//   const fileMetadata = {
-//     name: file.originalFilename, // Name of the file as it will appear in Google Drive
-//     parents: [folderId],         // Parent folder ID for organization
-//   };
-
-
-//   const media = {
-//     mimeType: file.mimetype,     // File MIME type (e.g., application/pdf)
-//     body: fs.createReadStream(file.filepath), // File data as a stream
-//   };
-
-//   const response = await drive.files.create({
-//     resource: fileMetadata,
-//     media,                      // Media content to upload
-//     fields: "id",               // Only return the file ID
-//   });
-
-//   return response.data.id;      // Return the uploaded file's ID
-// };
-
-
-// const createFolder = async (name, parentFolderId = null) => {
-//   const fileMetadata = {
-//     name,                       // Folder name
-//     mimeType: "application/vnd.google-apps.folder", // MIME type for Google Drive folders
-//   };
-
-//   if (parentFolderId) {
-//     fileMetadata.parents = [parentFolderId]; // Assign to a parent folder if specified
-//   }
-
-//   const folder = await drive.files.create({
-//     resource: fileMetadata,
-//     fields: "id",               // Only return the folder ID
-//   });
-
-//   return folder.data.id;        // Return the created folder's ID
-// };
-const uploadFileToDrive = async (folderId, file) => {
-  if (!file || !file.filepath) {
-    console.error("Invalid file object received:", file);
-    throw new Error("File path is undefined. Ensure the file is uploaded correctly.");
-  }
-
-  const fileMetadata = {
-    name: file.originalFilename || "unnamed-file",
-    parents: [folderId],
-  };
-
-  const media = {
-    mimeType: file.mimetype,
-    body: fs.createReadStream(file.filepath),
-  };
-
-  try {
-    const response = await drive.files.create({
-      resource: fileMetadata,
-      media,
-      fields: "id",
-    });
-
-    return response.data.id;
-  } catch (error) {
-    console.error("Error uploading file to Google Drive:", error);
+    console.error('Error getting file links:', error.message);
     throw error;
   }
 };
 
-// Function to create or fetch a folder in Google Drive
-const getOrCreateFolder = async (name, parentFolderId = null) => {
-  let query = `name='${name}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
-  if (parentFolderId) {
-    query += ` and '${parentFolderId}' in parents`;
+const uploadFileToDrive = async (folderId, file) => {
+  try {
+    if (!file || !file.filepath) {
+      throw new Error('Invalid file object');
+    }
+
+    const fileMetadata = {
+      name: file.originalFilename || 'unnamed-file',
+      parents: [folderId],
+    };
+
+    const media = {
+      mimeType: file.mimetype,
+      body: fs.createReadStream(file.filepath),
+    };
+
+    const response = await drive.files.create({
+      resource: fileMetadata,
+      media,
+      fields: 'id',
+    });
+
+    return response.data.id;
+  } catch (error) {
+    console.error('Error uploading file to drive:', error.message);
+    throw error;
   }
-
-  const response = await drive.files.list({
-    q: query,
-    fields: "files(id, name)",
-    spaces: "drive",
-  });
-
-  if (response.data.files.length > 0) {
-    return response.data.files[0].id;
-  }
-
-  const folder = await drive.files.create({
-    resource: {
-      name,
-      mimeType: "application/vnd.google-apps.folder",
-      parents: parentFolderId ? [parentFolderId] : [],
-    },
-    fields: "id",
-  });
-
-  return folder.data.id;
 };
 
 
+// Helper function to get or create folder
+const getOrCreateFolder = async (name, parentFolderId = null) => {
+  try {
+    let query = `name='${name}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+    if (parentFolderId) {
+      query += ` and '${parentFolderId}' in parents`;
+    }
+
+    const response = await drive.files.list({
+      q: query,
+      fields: 'files(id, name)',
+      spaces: 'drive',
+    });
+
+    if (response.data.files.length > 0) {
+      return response.data.files[0].id;
+    }
+
+    const folder = await drive.files.create({
+      resource: {
+        name,
+        mimeType: 'application/vnd.google-apps.folder',
+        parents: parentFolderId ? [parentFolderId] : [],
+      },
+      fields: 'id',
+    });
+
+    return folder.data.id;
+  } catch (error) {
+    console.error('Error in getOrCreateFolder:', error);
+    throw new Error(`Failed to setup folder: ${error.message}`);
+  }
+};
 
 
-
-module.exports = { uploadFile, deleteFile, getFileLink, uploadFileToDrive, getOrCreateFolder };
+module.exports = {
+  drive,
+  uploadFile,
+  deleteFile,
+  getFileLink,
+  uploadFileToDrive,
+  getOrCreateFolder,
+};

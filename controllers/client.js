@@ -1,11 +1,13 @@
 const { Client, TeamLeader } = require('../models/models');
 const { hashPassword, comparePasswords } = require('../utils/bcryptUtils');
-const { uploadFileToDrive, getOrCreateFolder, getFileLink, deleteFile } = require('../utils/googleDriveServices');
-const { generateToken } = require('../utils/jwtUtils');
-const formidable = require("formidable");
-const path = require("path"); // Import path module
+const { drive, uploadFileToDrive, getOrCreateFolder, getFileLink, deleteFile } = require('../utils/googleDriveServices');
+const { generateToken } = require('../utils/jwtUtils'); 
 // const fs = require("fs");
 const fs = require("fs/promises"); // Use the promise-based API 
+
+const busboy = require('busboy');
+const { Readable } = require('stream');
+const mime = require('mime-types'); // Add this package for MIME type validation
 
 const signupClient = async (req, res) => {
     try {
@@ -349,126 +351,221 @@ const getClientsForTeamLeader = async (req, res) => {
     }
 };
 
-// Endpoint to handle document uploads
+// Configuration
+// const CONFIG = {
+//     MAX_FILE_SIZE: 10 * 1024 * 1024, // 10MB
+//     ALLOWED_MIME_TYPES: [
+//         'image/jpeg',
+//         'image/png',
+//         'image/jpg',
+//         'application/pdf',
+//         'application/msword',
+//         'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+//     ]
+// };
+
 const uploadDocuments = async (req, res) => {
+    let clientId = null;
+    let clientFolderId = null;
+    let client = null;
+    const uploadedFiles = {};
+    const fileBuffers = {};
+
     try {
-        const uploadDir = path.join(__dirname, "uploads");
-
-        // Ensure the 'uploads' directory exists
-        try {
-            await fs.mkdir(uploadDir, { recursive: true });
-            console.log("Uploads directory ensured.");
-        } catch (mkdirError) {
-            console.error("Error creating upload directory:", mkdirError);
-            return res.status(500).json({ message: "Failed to create upload directory" });
-        }
-
-        const form = new formidable.IncomingForm({
-            multiples: true,
-            keepExtensions: true,
-            uploadDir, // Save files to the 'uploads' directory
-            allowEmptyFiles: false,
+        const bb = busboy({ 
+            headers: req.headers,
+            limits: {
+                fileSize: 10 * 1024 * 1024,
+                files: 5
+            }
         });
 
-        form.parse(req, async (err, fields, files) => {
-            if (err) {
-                console.error("Formidable parsing error:", err);
-                return res.status(500).json({ message: "File parsing error", error: err });
-            }
+        const uploadProcess = new Promise((resolve, reject) => {
+            let clientSetupComplete = false;
+            const filePromises = [];
 
-            const { clientId } = fields;
-            if (!clientId) {
-                return res.status(400).json({ message: "Client ID is required" });
-            }
-
-            try {
-                const client = await Client.findById(clientId);
-                if (!client) {
-                    return res.status(404).json({ message: "Client not found" });
-                }
-
-                const clientsFolderId = await getOrCreateFolder("Clients");
-                const clientFolderName = `${client.name}_${client.contactNumber}`;
-                const clientFolderId = await getOrCreateFolder(clientFolderName, clientsFolderId);
-
-                const uploadedFiles = {};
-                for (const [key, fileArray] of Object.entries(files)) {
-                    if (Array.isArray(fileArray)) {
-                        for (const file of fileArray) {
-                            if (file.filepath) {
-                                try {
-                                    const fileId = await uploadFileToDrive(clientFolderId, file);
-                                    uploadedFiles[key] = fileId;
-                                    console.log(`Uploaded file "${file.originalFilename}" with ID: ${fileId}`);
-                                    await fs.unlink(file.filepath);
-                                    console.log(`Deleted local file: ${file.filepath}`);
-                                } catch (uploadError) {
-                                    console.error(`Failed to upload file "${file.originalFilename}":`, uploadError);
-                                }
-                            } else {
-                                console.warn(`Skipping file upload for key: ${key}. Filepath is undefined.`);
-                            }
+            // Handle fields first
+            bb.on('field', async (name, value) => {
+                if (name === 'clientId') {
+                    try {
+                        console.log('Received clientId:', value);
+                        clientId = value;
+                        
+                        // Find client
+                        client = await Client.findById(clientId);
+                        if (!client) {
+                            throw new Error('Client not found');
                         }
-                    } else {
-                        console.warn(`Unexpected structure for key: ${key}`);
+                        console.log('Found client:', client.name);
+
+                        // Set up folders
+                        const clientsFolderId = await getOrCreateFolder("Clients");
+                        console.log('Created/found Clients folder:', clientsFolderId);
+                        
+                        const clientFolderName = `${client.name}_${client.contactNumber}`;
+                        clientFolderId = await getOrCreateFolder(clientFolderName, clientsFolderId);
+                        console.log('Created/found client folder:', clientFolderId);
+
+                        clientSetupComplete = true;
+                    } catch (error) {
+                        console.error('Error in client setup:', error);
+                        reject(error);
                     }
                 }
+            });
 
-                client.documents = { ...client.documents, ...uploadedFiles };
-                await client.save();
-
-                res.json({
-                    message: "Documents uploaded successfully",
-                    uploadedFiles,
+            // Handle files
+            bb.on('file', (fieldname, file, fileInfo) => {
+                console.log('Processing file:', fieldname);
+                fileBuffers[fieldname] = [];
+                
+                file.on('data', data => {
+                    fileBuffers[fieldname].push(data);
                 });
-            } catch (error) {
-                console.error("Error in document upload:", error);
-                res.status(500).json({ message: "Error in document upload", error });
-            }
+
+                file.on('end', () => {
+                    console.log(`File ${fieldname} buffered`);
+                });
+            });
+
+            // Handle completion
+            bb.on('finish', async () => {
+                try {
+                    console.log('Upload process finishing...');
+                    
+                    // Wait for client setup to complete
+                    let attempts = 0;
+                    while (!clientSetupComplete && attempts < 10) {
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                        attempts++;
+                    }
+
+                    if (!clientSetupComplete) {
+                        throw new Error('Client setup timed out');
+                    }
+
+                    if (!client || !clientFolderId) {
+                        throw new Error('Client setup incomplete - Make sure clientId is sent before files');
+                    }
+
+                    // Process buffered files
+                    for (const [fieldname, buffers] of Object.entries(fileBuffers)) {
+                        const filePromise = (async () => {
+                            try {
+                                const fileBuffer = Buffer.concat(buffers);
+                                const fileStream = new Readable();
+                                fileStream.push(fileBuffer);
+                                fileStream.push(null);
+
+                                const response = await drive.files.create({
+                                    requestBody: {
+                                        name: fieldname,
+                                        parents: [clientFolderId],
+                                    },
+                                    media: {
+                                        mimeType: 'application/octet-stream',
+                                        body: fileStream
+                                    },
+                                    fields: 'id',
+                                });
+
+                                uploadedFiles[fieldname] = response.data.id;
+                                return {
+                                    fieldname,
+                                    fileId: response.data.id,
+                                    filename: fieldname
+                                };
+                            } catch (error) {
+                                console.error(`Error uploading ${fieldname}:`, error);
+                                throw error;
+                            }
+                        })();
+
+                        filePromises.push(filePromise);
+                    }
+
+                    const results = await Promise.all(filePromises);
+                    console.log('All files processed');
+
+                    // Update client documents
+                    client.documents = { ...client.documents, ...uploadedFiles };
+                    await client.save();
+                    console.log('Client documents updated');
+
+                    resolve(results);
+                } catch (error) {
+                    console.error('Error in finish handler:', error);
+                    reject(error);
+                }
+            });
+
+            bb.on('error', (error) => {
+                console.error('Busboy error:', error);
+                reject(error);
+            });
         });
-    } catch (globalError) {
-        console.error("Unexpected error:", globalError);
-        res.status(500).json({ message: "Unexpected server error", error: globalError });
+
+        req.pipe(bb);
+
+        const results = await uploadProcess;
+
+        res.status(200).json({
+            message: "Documents uploaded successfully",
+            uploadedFiles: results.reduce((acc, file) => {
+                acc[file.fieldname] = file.fileId;
+                return acc;
+            }, {})
+        });
+
+    } catch (error) {
+        console.error('Upload error:', error);
+        res.status(500).json({
+            message: error.message || "Upload failed",
+            error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
     }
 };
 
+// Get document links function remains largely the same
 const getDocLinks = async (req, res) => {
     try {
         const { clientId } = req.body;
-
-        // Step 1: Fetch the client document details from the database
+        
         const client = await Client.findById(clientId);
         if (!client) {
             return res.status(404).json({ message: "Client not found" });
         }
 
-        // Step 2: Extract document file IDs from the client record
         const documents = client.documents || {};
         const documentLinks = {};
 
-        // Step 3: Fetch public links for each document file ID
-        for (const [docName, fileId] of Object.entries(documents)) {
-            if (fileId) {
-                try {
-                    const links = await getFileLink(fileId); // Fetch webViewLink and webContentLink
-                    documentLinks[docName] = links;
-                } catch (error) {
-                    console.error(`Error fetching link for document "${docName}":`, error);
-                    documentLinks[docName] = { error: "Failed to fetch link" };
+        // Process all documents in parallel
+        await Promise.all(
+            Object.entries(documents).map(async ([docName, fileId]) => {
+                if (fileId) {
+                    try {
+                        const links = await getFileLink(fileId);
+                        documentLinks[docName] = links;
+                    } catch (error) {
+                        console.error(`Error fetching link for document "${docName}":`, error);
+                        documentLinks[docName] = { error: "Failed to fetch link" };
+                    }
+                } else {
+                    documentLinks[docName] = { error: "File ID not available" };
                 }
-            } else {
-                documentLinks[docName] = { error: "File ID not available" };
-            }
-        }
+            })
+        );
 
-        // Step 4: Send response with the document links
         res.status(200).json({
             message: "Document links retrieved successfully",
             documentLinks,
         });
     } catch (error) {
         console.error("Error retrieving document links:", error);
-        res.status(500).json({ message: "Failed to retrieve document links", error });
+        res.status(500).json({ 
+            message: "Failed to retrieve document links", 
+            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+        });
     }
 };
 
