@@ -78,7 +78,7 @@ const clientSchema = new Schema({
     },
     documents: { // Nested structure for document links
         employeeMasterDatabase: { type: String }, // URL or reference to uploaded file
-        currentSalaryStructure: { type: String }, // URL or reference to uploaded file
+        currentSalaryStructure: { type: String },  // URL or reference to uploaded file
         previousSalarySheets: { type: String }, // URL or reference to uploaded files
         currentHRPolicies: { type: String }, // URL or reference to uploaded file
         leaveBalance: { type: String } // Leave balance data till last month-end
@@ -212,7 +212,19 @@ const messageSchema = new Schema({
         required: true,
         enum: ['TeamLeader', 'Client']
     },
-    content: { type: String, required: true },
+    content: { type: String },
+    document: {
+        fileName: String,
+        fileId: String,    // Google Drive file ID
+        webViewLink: String,
+        fileType: String,
+        fileSize: Number
+    },
+    messageType: {
+        type: String,
+        enum: ['text', 'document'],
+        default: 'text'
+    },
     read: { type: Boolean, default: false },
 }, { timestamps: true });
 

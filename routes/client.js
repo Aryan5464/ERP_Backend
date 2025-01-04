@@ -1,6 +1,6 @@
 const express = require('express');
 const verifyAuthToken = require('../middleware/authMiddleware');
-const { onboardClient, signupClient, loginClient, editClient, deleteClient, getAllClients, getClientsForTeamLeader, uploadDocuments, getDocLinks, getClientDetails } = require('../controllers/client');
+const { onboardClient, signupClient, loginClient, editClient, deleteClient, getAllClients, getClientsForTeamLeader, uploadDocuments, getClientDocuments, getClientDetails } = require('../controllers/client');
 const router = express.Router();
 
 // Client signup route
@@ -27,6 +27,6 @@ router.post('/getClientsForTeamLeader', getClientsForTeamLeader);
 // Route for uploading client documents
 router.post('/upload-documents', uploadDocuments);
 
-router.post('/getDocLinks', getDocLinks);
+router.post('/getClientDocuments', getClientDocuments);
 
 module.exports = router;

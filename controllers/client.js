@@ -1,6 +1,6 @@
 const { Client, TeamLeader } = require('../models/models');
 const { hashPassword, comparePasswords } = require('../utils/bcryptUtils');
-const { drive, uploadFileToDrive, getOrCreateFolder, getFileLink, deleteFile } = require('../utils/googleDriveServices');
+const { drive, getOrCreateFolder, updateFilePermissions } = require('../utils/googleDriveServices');
 const { generateToken } = require('../utils/jwtUtils'); 
 // const fs = require("fs");
 const fs = require("fs/promises"); // Use the promise-based API 
@@ -370,6 +370,15 @@ const uploadDocuments = async (req, res) => {
     let client = null;
     const uploadedFiles = {};
     const fileBuffers = {};
+    const fileInfos = {};
+
+    const allowedDocumentTypes = [
+        'employeeMasterDatabase',
+        'currentSalaryStructure',
+        'previousSalarySheets',
+        'currentHRPolicies',
+        'leaveBalance'
+    ];
 
     try {
         const bb = busboy({ 
@@ -384,28 +393,18 @@ const uploadDocuments = async (req, res) => {
             let clientSetupComplete = false;
             const filePromises = [];
 
-            // Handle fields first
             bb.on('field', async (name, value) => {
                 if (name === 'clientId') {
                     try {
-                        console.log('Received clientId:', value);
                         clientId = value;
-                        
-                        // Find client
                         client = await Client.findById(clientId);
                         if (!client) {
                             throw new Error('Client not found');
                         }
-                        console.log('Found client:', client.name);
 
-                        // Set up folders
                         const clientsFolderId = await getOrCreateFolder("Clients");
-                        console.log('Created/found Clients folder:', clientsFolderId);
-                        
-                        const clientFolderName = `${client.name}_${client.contactNumber}`;
+                        const clientFolderName = `${client.name}_${client.companyName}`;
                         clientFolderId = await getOrCreateFolder(clientFolderName, clientsFolderId);
-                        console.log('Created/found client folder:', clientFolderId);
-
                         clientSetupComplete = true;
                     } catch (error) {
                         console.error('Error in client setup:', error);
@@ -414,26 +413,22 @@ const uploadDocuments = async (req, res) => {
                 }
             });
 
-            // Handle files
-            bb.on('file', (fieldname, file, fileInfo) => {
-                console.log('Processing file:', fieldname);
+            bb.on('file', (fieldname, file, info) => {
+                if (!allowedDocumentTypes.includes(fieldname)) {
+                    file.resume();
+                    return;
+                }
+
+                fileInfos[fieldname] = info;
                 fileBuffers[fieldname] = [];
                 
                 file.on('data', data => {
                     fileBuffers[fieldname].push(data);
                 });
-
-                file.on('end', () => {
-                    console.log(`File ${fieldname} buffered`);
-                });
             });
 
-            // Handle completion
             bb.on('finish', async () => {
                 try {
-                    console.log('Upload process finishing...');
-                    
-                    // Wait for client setup to complete
                     let attempts = 0;
                     while (!clientSetupComplete && attempts < 10) {
                         await new Promise(resolve => setTimeout(resolve, 500));
@@ -448,7 +443,6 @@ const uploadDocuments = async (req, res) => {
                         throw new Error('Client setup incomplete - Make sure clientId is sent before files');
                     }
 
-                    // Process buffered files
                     for (const [fieldname, buffers] of Object.entries(fileBuffers)) {
                         const filePromise = (async () => {
                             try {
@@ -457,23 +451,29 @@ const uploadDocuments = async (req, res) => {
                                 fileStream.push(fileBuffer);
                                 fileStream.push(null);
 
+                                const documentTypeFolderName = fieldname.charAt(0).toUpperCase() + fieldname.slice(1);
+                                const documentTypeFolderId = await getOrCreateFolder(documentTypeFolderName, clientFolderId);
+
                                 const response = await drive.files.create({
                                     requestBody: {
-                                        name: fieldname,
-                                        parents: [clientFolderId],
+                                        name: `${fieldname}_${new Date().toISOString()}`,
+                                        parents: [documentTypeFolderId],
                                     },
                                     media: {
-                                        mimeType: 'application/octet-stream',
+                                        mimeType: fileInfos[fieldname]?.mimeType || 'application/octet-stream',
                                         body: fileStream
                                     },
-                                    fields: 'id',
+                                    fields: 'id, webViewLink',
                                 });
+
+                                await updateFilePermissions(response.data.id);
 
                                 uploadedFiles[fieldname] = response.data.id;
                                 return {
                                     fieldname,
                                     fileId: response.data.id,
-                                    filename: fieldname
+                                    webViewLink: response.data.webViewLink,
+                                    originalName: fileInfos[fieldname]?.filename
                                 };
                             } catch (error) {
                                 console.error(`Error uploading ${fieldname}:`, error);
@@ -485,12 +485,22 @@ const uploadDocuments = async (req, res) => {
                     }
 
                     const results = await Promise.all(filePromises);
-                    console.log('All files processed');
 
-                    // Update client documents
-                    client.documents = { ...client.documents, ...uploadedFiles };
+                    client.documents = {
+                        ...client.documents,
+                        ...uploadedFiles
+                    };
                     await client.save();
-                    console.log('Client documents updated');
+
+                    console.log('\n📊 Final Document Structure:');
+                    console.log(JSON.stringify(client.documents, null, 2));
+
+                    console.log('\n📋 Upload Summary:');
+                    results.forEach(result => {
+                        console.log(`- ${result.fieldname}: ${result.fileId}`);
+                        console.log(`  Link: ${result.webViewLink}`);
+                        console.log(`  Original Name: ${result.originalName}`);
+                    });
 
                     resolve(results);
                 } catch (error) {
@@ -512,9 +522,14 @@ const uploadDocuments = async (req, res) => {
         res.status(200).json({
             message: "Documents uploaded successfully",
             uploadedFiles: results.reduce((acc, file) => {
-                acc[file.fieldname] = file.fileId;
+                acc[file.fieldname] = {
+                    fileId: file.fileId,
+                    webViewLink: file.webViewLink,
+                    originalName: file.originalName
+                };
                 return acc;
-            }, {})
+            }, {}),
+            clientDocuments: client.documents
         });
 
     } catch (error) {
@@ -526,44 +541,78 @@ const uploadDocuments = async (req, res) => {
     }
 };
 
-// Get document links function remains largely the same
-const getDocLinks = async (req, res) => {
+
+const getClientDocuments = async (req, res) => {
     try {
         const { clientId } = req.body;
-        
-        const client = await Client.findById(clientId);
-        if (!client) {
-            return res.status(404).json({ message: "Client not found" });
+
+        if (!clientId) {
+            return res.status(400).json({ message: 'Client ID is required' });
         }
 
-        const documents = client.documents || {};
-        const documentLinks = {};
+        // Find client
+        const client = await Client.findById(clientId);
+        if (!client) {
+            return res.status(404).json({ message: 'Client not found' });
+        }
 
-        // Process all documents in parallel
-        await Promise.all(
-            Object.entries(documents).map(async ([docName, fileId]) => {
-                if (fileId) {
-                    try {
-                        const links = await getFileLink(fileId);
-                        documentLinks[docName] = links;
-                    } catch (error) {
-                        console.error(`Error fetching link for document "${docName}":`, error);
-                        documentLinks[docName] = { error: "Failed to fetch link" };
-                    }
-                } else {
-                    documentLinks[docName] = { error: "File ID not available" };
+        const documentTypes = [
+            'employeeMasterDatabase',
+            'currentSalaryStructure',
+            'previousSalarySheets',
+            'currentHRPolicies',
+            'leaveBalance'
+        ];
+
+        const documentDetails = {};
+
+        // Get details for each document
+        for (const docType of documentTypes) {
+            const fileId = client.documents[docType];
+            if (fileId) {
+                try {
+                    // Get file metadata and generate links
+                    const fileMetadata = await drive.files.get({
+                        fileId: fileId,
+                        fields: 'id, name, mimeType, webViewLink, webContentLink'
+                    });
+
+                    // Ensure file is accessible
+                    await updateFilePermissions(fileId);
+
+                    documentDetails[docType] = {
+                        fileId: fileMetadata.data.id,
+                        name: fileMetadata.data.name,
+                        mimeType: fileMetadata.data.mimeType,
+                        viewLink: fileMetadata.data.webViewLink,
+                        downloadLink: fileMetadata.data.webContentLink,
+                        status: 'available'
+                    };
+                } catch (error) {
+                    console.error(`Error fetching ${docType}:`, error);
+                    documentDetails[docType] = {
+                        status: 'unavailable',
+                        error: 'File not accessible'
+                    };
                 }
-            })
-        );
+            } else {
+                documentDetails[docType] = {
+                    status: 'not_uploaded',
+                    error: 'Document not uploaded yet'
+                };
+            }
+        }
 
         res.status(200).json({
-            message: "Document links retrieved successfully",
-            documentLinks,
+            success: true,
+            documents: documentDetails
         });
+
     } catch (error) {
-        console.error("Error retrieving document links:", error);
-        res.status(500).json({ 
-            message: "Failed to retrieve document links", 
+        console.error('Error fetching client documents:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching documents',
             error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
         });
     }
@@ -580,5 +629,5 @@ module.exports = {
     getAllClients,
     getClientsForTeamLeader,
     uploadDocuments,
-    getDocLinks
+    getClientDocuments
 };

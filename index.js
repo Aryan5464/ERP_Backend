@@ -4,7 +4,7 @@ const cors = require("cors");
 const dotenv = require('dotenv');
 const http = require('http'); // Add this
 const socketIO = require('socket.io'); // Add this
-const {Message} = require('./models/models'); // Create this model
+const { Message } = require('./models/models'); // Create this model
 dotenv.config();
 
 // Create HTTP server
@@ -47,17 +47,60 @@ io.on('connection', (socket) => {
         console.log('User connected:', userData.userId);
     });
 
+    // For Text Messages: 
+    // {
+    //      senderId: "user_id_string",        // MongoDB ObjectId of sender
+    //      senderType: "TeamLeader" | "Client", // Type of sender
+    //      receiverId: "user_id_string",      // MongoDB ObjectId of receiver
+    //      receiverType: "TeamLeader" | "Client", // Type of receiver
+    //      messageType: "text",               // Specifies this is a text message
+    //      content: "Hello, this is a message" // The actual message text
+    // }
+
+    // For Document Messages: 
+    // {
+    //      senderId: "user_id_string",        // MongoDB ObjectId of sender
+    //      senderType: "TeamLeader" | "Client", // Type of sender
+    //      receiverId: "user_id_string",      // MongoDB ObjectId of receiver
+    //      receiverType: "TeamLeader" | "Client", // Type of receiver
+    //      messageType: "document",           // Specifies this is a document message
+    //      file: {                           // File object
+    //          buffer: Buffer,               // File buffer
+    //          originalname: "example.pdf",   // Original file name
+    //          mimetype: "application/pdf",   // File mime type
+    //          size: 12345                   // File size in bytes
+    //      }
+    // }
+    
     // Handle private messages
     socket.on('private_message', async (data) => {
         try {
-            // Save message to database (implement this in your message controller)
-            const message = new Message({
+            let messageData = {
                 sender: data.senderId,
                 senderType: data.senderType,
                 receiver: data.receiverId,
                 receiverType: data.receiverType,
-                content: data.content
-            });
+                messageType: data.messageType || 'text'
+            };
+
+            // Handle different message types
+            if (data.messageType === 'document' && data.file) {
+                // Handle document upload
+                const uploadResult = await googleDriveService.uploadFile(data.file);
+                messageData.document = {
+                    fileName: uploadResult.fileName,
+                    fileId: uploadResult.fileId,
+                    webViewLink: uploadResult.webViewLink,
+                    fileType: uploadResult.fileType,
+                    fileSize: uploadResult.fileSize
+                };
+            } else {
+                // Handle text message
+                messageData.content = data.content;
+            }
+
+            // Create and save message
+            const message = new Message(messageData);
             await message.save();
 
             // Send message to receiver if online
@@ -65,12 +108,22 @@ io.on('connection', (socket) => {
             if (receiverSocketId) {
                 io.to(receiverSocketId).emit('receive_message', message);
             }
+
+            // Send acknowledgment to sender
+            socket.emit('message_sent', {
+                success: true,
+                messageId: message._id
+            });
+
         } catch (error) {
-            console.error('Error sending message:', error);
+            console.error('Error handling message:', error);
+            socket.emit('message_error', {
+                success: false,
+                error: 'Failed to process message'
+            });
         }
     });
 
-    // Handle typing status
     socket.on('typing', (data) => {
         const receiverSocketId = connectedUsers.get(data.receiverId);
         if (receiverSocketId) {
@@ -100,7 +153,7 @@ app.get('/', (req, res) => {
 
 app.use('/superAdmin', superAdminRoute);
 app.use('/admin', adminRoute);
-app.use('/teamLeader', TLroutes); 
+app.use('/teamLeader', TLroutes);
 app.use('/employee', employeeRoutes);
 app.use('/client', clientRoutes);
 app.use('/task', taskRoutes);
