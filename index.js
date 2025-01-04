@@ -33,6 +33,7 @@ const taskRoutes = require('./routes/task');
 const notificationRoutes = require('./routes/notification');
 const chatRoutes = require('./routes/chat'); // Add this - create this file
 const { restartCronJobs } = require('./controllers/task');
+const { uploadFile } = require('./utils/googleDriveServices');
 
 // Store connected users
 const connectedUsers = new Map();
@@ -86,7 +87,7 @@ io.on('connection', (socket) => {
             // Handle different message types
             if (data.messageType === 'document' && data.file) {
                 // Handle document upload
-                const uploadResult = await googleDriveService.uploadFile(data.file);
+                const uploadResult = await uploadFile(data.file);
                 messageData.document = {
                     fileName: uploadResult.fileName,
                     fileId: uploadResult.fileId,
