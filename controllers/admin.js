@@ -234,7 +234,7 @@ const forgotPassword = async (req, res) => {
         if (!admin) {
             return res.status(404).json({ message: 'No admin found with this email' });
         }
- 
+
         const resetToken = admin.createPasswordResetToken();
         await admin.save({ validateBeforeSave: false });
 
@@ -294,17 +294,26 @@ const forgotPassword = async (req, res) => {
     }
 };
 
-// Reset Password Controller
+
 const resetPassword = async (req, res) => {
     try {
         const { token } = req.params;
         const { password } = req.body;
 
+        // Validate password
+        if (!password) {
+            return res.status(400).json({
+                message: 'New password is required'
+            });
+        }
+
+        // Hash the reset token from params
         const hashedToken = crypto
             .createHash('sha256')
             .update(token)
             .digest('hex');
 
+        // Find admin with valid token
         const admin = await Admin.findOne({
             resetPasswordToken: hashedToken,
             resetPasswordExpires: { $gt: Date.now() }
@@ -316,22 +325,34 @@ const resetPassword = async (req, res) => {
             });
         }
 
-        // Set new password
-        admin.password = await hashPassword(password);
+        // Hash the new password using your existing hashPassword function
+        const newHashedPassword = await hashPassword(password);
+
+        // Update admin's password and clear reset token fields
+        admin.password = newHashedPassword;
         admin.resetPasswordToken = undefined;
         admin.resetPasswordExpires = undefined;
+
         await admin.save();
 
         // Generate new login token
-        const loginToken = generateToken({ id: admin._id, email: admin.email, role: 'Admin' });
+        const loginToken = generateToken({
+            id: admin._id,
+            email: admin.email,
+            role: 'Admin'
+        });
 
+        // Send success response
         res.status(200).json({
             message: 'Password reset successful',
             token: loginToken
         });
+
     } catch (error) {
         console.error('Error in reset password:', error);
-        res.status(500).json({ message: 'Server error' });
+        res.status(500).json({
+            message: 'An error occurred while resetting password'
+        });
     }
 };
 
