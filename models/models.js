@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { Schema } = mongoose;
+const crypto = require('crypto');
 
 // SuperAdmin Schema
 const superAdminSchema = new Schema({
@@ -18,10 +19,28 @@ const adminSchema = new Schema({
     dp: { type: String },
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
-    teamLeaders: [{ type: Schema.Types.ObjectId, ref: 'TeamLeader' }], // Array of TeamLeaders under the Admin
-    // employees: [{ type: Schema.Types.ObjectId, ref: 'Employee' }], // Array of Employees directly managed by the Admin
+    teamLeaders: [{ type: Schema.Types.ObjectId, ref: 'TeamLeader' }],
+    resetPasswordToken: {type: String},
+    resetPasswordExpires: {type: Date}
 
 }, { timestamps: true });
+
+// In Admin.js model
+adminSchema.methods.createPasswordResetToken = function() {
+    // Generate reset token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    
+    // Hash the token and save to database
+    this.resetPasswordToken = crypto
+        .createHash('sha256')
+        .update(resetToken)
+        .digest('hex');
+        
+    // Set token expiry (10 minutes)
+    this.resetPasswordExpires = Date.now() + 10 * 60 * 1000;
+    
+    return resetToken;
+};
 
 const Admin = mongoose.model('Admin', adminSchema);
 
@@ -215,7 +234,7 @@ const messageSchema = new Schema({
     content: { type: String },
     document: {
         fileName: String,
-        fileId: String,    // Google Drive file ID
+        fileId: String,
         webViewLink: String,
         fileType: String,
         fileSize: Number

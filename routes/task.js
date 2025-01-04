@@ -87,6 +87,6 @@ cron.schedule('*/30 * * * *', () => {
     updateOverdueTasks();
 });
 
-updateOverdueTasks();
+// updateOverdueTasks();
 
 module.exports = router;

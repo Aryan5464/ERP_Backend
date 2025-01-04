@@ -3,11 +3,9 @@
 const { Admin } = require('../models/models');
 const { hashPassword, comparePasswords } = require('../utils/bcryptUtils');
 const { generateToken } = require('../utils/jwtUtils');
-const { getOrCreateFolder, uploadFileToDrive, getFileLink, deleteFile } = require('../utils/googleDriveServices');
-const formidable = require("formidable");
-const sharp = require("sharp");
-const fs = require("fs/promises");
-const path = require("path"); // Import the path module
+const crypto = require('crypto');
+const sendEmail = require('../utils/emailService');
+
 
 
 // Function to create a new Admin
@@ -222,11 +220,130 @@ const updateAdminPassword = async (req, res) => {
 };
 
 
+
+// controllers/admin.js
+const forgotPassword = async (req, res) => {
+    try {
+        const { email } = req.body;
+
+        if (!email) {
+            return res.status(400).json({ message: 'Email is required' });
+        }
+
+        const admin = await Admin.findOne({ email });
+        if (!admin) {
+            return res.status(404).json({ message: 'No admin found with this email' });
+        }
+ 
+        const resetToken = admin.createPasswordResetToken();
+        await admin.save({ validateBeforeSave: false });
+
+        const resetURL = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+
+        const htmlContent = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                <h1 style="color: #333;">Password Reset Request</h1>
+                <p>Hello ${admin.name || 'Admin'},</p>
+                <p>You requested to reset your password. Click the button below to reset it:</p>
+                <p>
+                    <a href="${resetURL}" 
+                       style="background-color: #4CAF50; 
+                              color: white; 
+                              padding: 12px 24px; 
+                              text-decoration: none; 
+                              border-radius: 5px; 
+                              display: inline-block;
+                              margin: 20px 0;">
+                        Reset My Password
+                    </a>
+                </p>
+                <p>If you didn't request this, please ignore this email.</p>
+                <p>This link will expire in 10 minutes.</p>
+                <p style="color: #666;">If the button doesn't work, copy and paste this link into your browser:</p>
+                <p style="word-break: break-all; color: #0066cc;">${resetURL}</p>
+                <hr style="border: 1px solid #eee; margin: 20px 0;">
+                <p>Best regards,<br>MabiconsERP Team</p>
+            </div>
+        `;
+
+        try {
+            await sendEmail({
+                email: admin.email,
+                subject: 'Password Reset Request',
+                htmlContent,
+                name: admin.name
+            });
+
+            res.status(200).json({
+                status: 'success',
+                message: 'Password reset instructions sent to email!'
+            });
+        } catch (err) {
+            admin.resetPasswordToken = undefined;
+            admin.resetPasswordExpires = undefined;
+            await admin.save({ validateBeforeSave: false });
+
+            console.error('Email sending error:', err);
+            return res.status(500).json({
+                message: 'There was an error sending the email. Try again later!'
+            });
+        }
+    } catch (error) {
+        console.error('Error in forgot password:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+// Reset Password Controller
+const resetPassword = async (req, res) => {
+    try {
+        const { token } = req.params;
+        const { password } = req.body;
+
+        const hashedToken = crypto
+            .createHash('sha256')
+            .update(token)
+            .digest('hex');
+
+        const admin = await Admin.findOne({
+            resetPasswordToken: hashedToken,
+            resetPasswordExpires: { $gt: Date.now() }
+        });
+
+        if (!admin) {
+            return res.status(400).json({
+                message: 'Token is invalid or has expired'
+            });
+        }
+
+        // Set new password
+        admin.password = await hashPassword(password);
+        admin.resetPasswordToken = undefined;
+        admin.resetPasswordExpires = undefined;
+        await admin.save();
+
+        // Generate new login token
+        const loginToken = generateToken({ id: admin._id, email: admin.email, role: 'Admin' });
+
+        res.status(200).json({
+            message: 'Password reset successful',
+            token: loginToken
+        });
+    } catch (error) {
+        console.error('Error in reset password:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+
+
 module.exports = {
     createAdmin,
     loginAdmin,
     editAdmin,
     deleteAdmin,
     getAdminHierarchy,
-    updateAdminPassword
+    updateAdminPassword,
+    forgotPassword,
+    resetPassword
 };
