@@ -2,6 +2,26 @@ const mongoose = require('mongoose');
 const { Schema } = mongoose;
 const crypto = require('crypto');
 
+
+// Add this function to create a reusable schema mixin
+const addPasswordResetFields = (schema) => {
+    schema.add({
+        resetPasswordToken: String,
+        resetPasswordExpires: Date
+    });
+
+    schema.methods.createPasswordResetToken = function () {
+        const resetToken = crypto.randomBytes(32).toString('hex');
+        this.resetPasswordToken = crypto
+            .createHash('sha256')
+            .update(resetToken)
+            .digest('hex');
+        this.resetPasswordExpires = Date.now() + 20 * 60 * 1000; // 20 minutes
+        return resetToken;
+    };
+};
+
+
 // SuperAdmin Schema
 const superAdminSchema = new Schema({
     name: { type: String, required: true },
@@ -10,7 +30,7 @@ const superAdminSchema = new Schema({
     password: { type: String, required: true },
     companyName: { type: String, required: true }
 }, { timestamps: true });
-
+addPasswordResetFields(superAdminSchema);
 const SuperAdmin = mongoose.model('SuperAdmin', superAdminSchema);
 
 // Admin Schema
@@ -19,30 +39,13 @@ const adminSchema = new Schema({
     dp: { type: String },
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
-    teamLeaders: [{ type: Schema.Types.ObjectId, ref: 'TeamLeader' }],
-    resetPasswordToken: {type: String},
-    resetPasswordExpires: {type: Date}
+    teamLeaders: [{ type: Schema.Types.ObjectId, ref: 'TeamLeader' }]
 
 }, { timestamps: true });
 
-// In Admin.js model
-adminSchema.methods.createPasswordResetToken = function() {
-    // Generate reset token
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    
-    // Hash the token and save to database
-    this.resetPasswordToken = crypto
-        .createHash('sha256')
-        .update(resetToken)
-        .digest('hex');
-        
-    // Set token expiry (10 minutes)
-    this.resetPasswordExpires = Date.now() + 10 * 60 * 1000;
-    
-    return resetToken;
-};
-
+addPasswordResetFields(adminSchema);
 const Admin = mongoose.model('Admin', adminSchema);
+
 
 const teamLeaderSchema = new Schema({
     name: { type: String, required: true },
@@ -53,10 +56,11 @@ const teamLeaderSchema = new Schema({
     admin: { type: Schema.Types.ObjectId, ref: 'Admin', required: true },
     employees: [{ type: Schema.Types.ObjectId, ref: 'Employee' }], // Array of Employees under the TeamLeader
     tasks: [{ type: Schema.Types.ObjectId, ref: 'Task' }],
-    clients: [{type: Schema.Types.ObjectId, ref: 'Client'}]
+    clients: [{ type: Schema.Types.ObjectId, ref: 'Client' }]
     // Other relevant fields
 }, { timestamps: true });
 
+addPasswordResetFields(teamLeaderSchema);
 const TeamLeader = mongoose.model('TeamLeader', teamLeaderSchema);
 
 // employee Schema 
@@ -70,6 +74,7 @@ const employeeSchema = new Schema({
     tasks: [{ type: Schema.Types.ObjectId, ref: 'Task' }],
     // Other relevant fields can be added here
 }, { timestamps: true });
+addPasswordResetFields(employeeSchema);
 
 const Employee = mongoose.model('Employee', employeeSchema);
 
@@ -87,12 +92,12 @@ const clientSchema = new Schema({
     numberOfCompanies: { type: Number }, // Number of companies/firms
     ownerDirectorDetails: [{ // Array to hold details of owners/directors
         name: { type: String, required: true },
-        email: {type: String},
+        email: { type: String },
         contact: { type: String, required: true }
     }],
     authorizedSignatory: {
         name: { type: String, required: true },
-        email: {type: String},
+        email: { type: String },
         contact: { type: String, required: true }
     },
     documents: { // Nested structure for document links
@@ -102,7 +107,7 @@ const clientSchema = new Schema({
         currentHRPolicies: { type: String }, // URL or reference to uploaded file
         leaveBalance: { type: String } // Leave balance data till last month-end
     },
-    website: { type: String }, 
+    website: { type: String },
     status: {
         type: String,
         enum: ['Accepted', 'Requested', 'Rejected'],
@@ -116,7 +121,7 @@ const clientSchema = new Schema({
     //     fyRecord: { type: String } // Record for the current financial year
     // },
 }, { timestamps: true });
-
+addPasswordResetFields(clientSchema);
 const Client = mongoose.model('Client', clientSchema);
 
 
@@ -129,10 +134,10 @@ const requestedTaskSchema = new Schema({
         enum: ['Frequency', 'Deadline'],
         default: 'Deadline'
     },
-    frequency: { 
-        type: String, 
-        enum: ['Every Monday', 'Every Tuesday', 'Every 15th Day of Month', 'Every Saturday', 'systum', 'systum'], 
-        default: null 
+    frequency: {
+        type: String,
+        enum: ['Every Monday', 'Every Tuesday', 'Every 15th Day of Month', 'Every Saturday', 'systum', 'systum'],
+        default: null
     }, // Only for frequency-based tasks
     dueDate: { type: Date }, // Only for deadline-based tasks
     priority: { type: String, enum: ['Low', 'Medium', 'High'], default: 'Medium' },
@@ -162,15 +167,15 @@ const taskSchema = new Schema({
         default: 'Deadline'
     },
     client: { type: Schema.Types.ObjectId, ref: 'Client' },
-    assignedTo: { 
+    assignedTo: {
         userType: { type: String, enum: ['Employee', 'TeamLeader'], required: true },
         userId: { type: Schema.Types.ObjectId, refPath: 'assignedTo.userType' }
     },
     dueDate: { type: Date },
-    frequency: { 
-        type: String, 
-        enum: ['Every Monday', 'Every Tuesday', 'Every 15th Day of Month', 'Every Saturday', 'systum', 'systum'], 
-        default: null 
+    frequency: {
+        type: String,
+        enum: ['Every Monday', 'Every Tuesday', 'Every 15th Day of Month', 'Every Saturday', 'systum', 'systum'],
+        default: null
     }, // Only set if this is a frequency-based task
     priority: { type: String, enum: ['Low', 'Medium', 'High'], default: 'Medium' },
     parentTaskId: { type: Schema.Types.ObjectId, ref: 'Task' }, // Reference for frequency tasks  
@@ -183,18 +188,18 @@ const recurringTaskSchema = new Schema({
     title: { type: String, required: true },
     description: { type: String, required: true },
     client: { type: Schema.Types.ObjectId, ref: 'Client', required: true },
-    frequency: { 
-        type: String, 
-        enum: ['Every Monday', 'Every Tuesday', 'Every 15th Day of Month', 'Every Saturday', 'systum'], 
-        required: true 
+    frequency: {
+        type: String,
+        enum: ['Every Monday', 'Every Tuesday', 'Every 15th Day of Month', 'Every Saturday', 'systum'],
+        required: true
     },
-    assignedTo: { 
+    assignedTo: {
         userType: { type: String, enum: ['Employee', 'TeamLeader'], required: true },
         userId: { type: Schema.Types.ObjectId, refPath: 'assignedTo.userType' }
     },
     priority: { type: String, enum: ['Low', 'Medium', 'High'], default: 'Medium' },
     active: { type: Boolean, default: true }, // Toggle for recurring tasks
-}, { timestamps: true });                                          
+}, { timestamps: true });
 
 const RecurringTask = mongoose.model('RecurringTask', recurringTaskSchema);
 
@@ -211,7 +216,7 @@ const notificationSchema = new Schema({
 const Notification = mongoose.model('Notification', notificationSchema);
 
 const messageSchema = new Schema({
-    sender: { 
+    sender: {
         type: Schema.Types.ObjectId,
         required: true,
         refPath: 'senderType'
@@ -221,7 +226,7 @@ const messageSchema = new Schema({
         required: true,
         enum: ['TeamLeader', 'Client']
     },
-    receiver: { 
+    receiver: {
         type: Schema.Types.ObjectId,
         required: true,
         refPath: 'receiverType'

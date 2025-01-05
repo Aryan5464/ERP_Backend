@@ -31,7 +31,8 @@ const seedSuperAdmin = require('./db/seedSuperAdmin');
 const clientRoutes = require('./routes/client')
 const taskRoutes = require('./routes/task');
 const notificationRoutes = require('./routes/notification');
-const chatRoutes = require('./routes/chat'); // Add this - create this file
+const chatRoutes = require('./routes/chat');
+const authRoutes = require('./routes/authRoutes');
 const { restartCronJobs } = require('./controllers/task');
 const { uploadFile } = require('./utils/googleDriveServices');
 
@@ -160,6 +161,7 @@ app.use('/client', clientRoutes);
 app.use('/task', taskRoutes);
 app.use('/notification', notificationRoutes);
 app.use('/chat', chatRoutes); // Add chat routes
+app.use('/auth', authRoutes);
 
 restartCronJobs();
 seedSuperAdmin();
