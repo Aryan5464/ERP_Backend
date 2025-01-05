@@ -11,6 +11,6 @@ router.post('/login', loginEmployee);
 
 router.delete('/delete', deleteEmployee);
 
-router.get('/employeeTasks', getEmployeeTasks); 
+router.post('/employeeTasks', getEmployeeTasks); 
 
 module.exports = router;
