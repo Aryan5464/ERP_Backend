@@ -175,6 +175,7 @@ const editTeamLeader = async (req, res) => {
 };
 
 
+
 const deleteTeamLeaderWithReassignment = async (req, res) => {
     const session = await mongoose.startSession();
     session.startTransaction();
@@ -209,29 +210,32 @@ const deleteTeamLeaderWithReassignment = async (req, res) => {
             { session }
         );
 
-        // Transfer Employees
-        await Employee.updateMany(
-            { teamLeaders: teamLeaderId },
-            { 
-                $pull: { teamLeaders: teamLeaderId },
-                $addToSet: { teamLeaders: newTeamLeaderId }
-            },
-            { session }
-        );
+        // First, get all employees that need to be updated
+        const employeesToUpdate = await Employee.find({ teamLeaders: teamLeaderId });
+
+        // Update each employee's teamLeaders array separately
+        for (const employee of employeesToUpdate) {
+            // Remove old team leader
+            await Employee.findByIdAndUpdate(
+                employee._id,
+                { $pull: { teamLeaders: teamLeaderId } },
+                { session }
+            );
+
+            // Add new team leader (if not already present)
+            await Employee.findByIdAndUpdate(
+                employee._id,
+                { $addToSet: { teamLeaders: newTeamLeaderId } },
+                { session }
+            );
+        }
 
         // Transfer Tasks
         await Task.updateMany(
             { teamLeader: teamLeaderId },
-            { $set: { teamLeader: newTeamLeaderId } },
-            { session }
-        );
-
-        // Update task assignments
-        await Task.updateMany(
-            { "assignedEmployees.userType": "TeamLeader", "assignedEmployees.userId": teamLeaderId },
             { 
-                $set: { "assignedEmployees.$.userId": newTeamLeaderId },
-                $push: { 
+                $set: { teamLeader: newTeamLeaderId },
+                $push: {
                     history: {
                         action: 'Team Leader Reassignment',
                         from: teamLeaderId,
@@ -239,6 +243,15 @@ const deleteTeamLeaderWithReassignment = async (req, res) => {
                         date: new Date()
                     }
                 }
+            },
+            { session }
+        );
+
+        // Update task assignments
+        await Task.updateMany(
+            { "assignedEmployees.userType": "TeamLeader", "assignedEmployees.userId": teamLeaderId },
+            { 
+                $set: { "assignedEmployees.$.userId": newTeamLeaderId }
             },
             { session }
         );
@@ -251,16 +264,16 @@ const deleteTeamLeaderWithReassignment = async (req, res) => {
         );
 
         // Update new team leader's references
-        await TeamLeader.findByIdAndUpdate(
+        const updatedTeamLeader = await TeamLeader.findByIdAndUpdate(
             newTeamLeaderId,
             {
                 $addToSet: {
-                    employees: { $each: teamLeaderToDelete.employees },
-                    tasks: { $each: teamLeaderToDelete.tasks },
-                    clients: { $each: teamLeaderToDelete.clients }
+                    employees: { $each: teamLeaderToDelete.employees || [] },
+                    tasks: { $each: teamLeaderToDelete.tasks || [] },
+                    clients: { $each: teamLeaderToDelete.clients || [] }
                 }
             },
-            { session }
+            { session, new: true }
         );
 
         // Delete the old team leader
@@ -281,8 +294,7 @@ const deleteTeamLeaderWithReassignment = async (req, res) => {
             });
 
             // Notify affected employees
-            const affectedEmployees = await Employee.find({ teamLeaders: teamLeaderId });
-            for (const employee of affectedEmployees) {
+            for (const employee of employeesToUpdate) {
                 await sendEmail({
                     email: employee.email,
                     name: employee.name,
@@ -304,15 +316,18 @@ const deleteTeamLeaderWithReassignment = async (req, res) => {
         res.status(200).json({
             message: 'Team Leader deleted and reassigned successfully',
             newTeamLeader: {
-                id: newTeamLeader._id,
-                name: newTeamLeader.name,
-                email: newTeamLeader.email
+                id: updatedTeamLeader._id,
+                name: updatedTeamLeader.name,
+                email: updatedTeamLeader.email
             }
         });
     } catch (error) {
         await session.abortTransaction();
         console.error('Error in team leader reassignment:', error);
-        res.status(500).json({ message: 'Server error during reassignment' });
+        res.status(500).json({ 
+            message: 'Server error during reassignment',
+            error: error.message 
+        });
     } finally {
         session.endSession();
     }
