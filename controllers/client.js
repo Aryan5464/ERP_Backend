@@ -8,6 +8,7 @@ const fs = require("fs/promises"); // Use the promise-based API
 const busboy = require('busboy');
 const { Readable } = require('stream');
 const mime = require('mime-types'); // Add this package for MIME type validation
+const sendEmail = require('../utils/emailService');
 
 const signupClient = async (req, res) => {
     try {
@@ -99,7 +100,7 @@ const loginClient = async (req, res) => {
 const onboardClient = async (req, res) => {
     try {
         const { clientId, action, teamLeaderId } = req.body;
-
+                  
         // Validate required fields
         if (!clientId || !action || !['Accepted', 'Rejected'].includes(action)) {
             return res.status(400).json({ message: 'Client ID and a valid action (Accepted or Rejected) are required.' });
@@ -117,9 +118,14 @@ const onboardClient = async (req, res) => {
                 return res.status(400).json({ message: 'Team Leader ID is required to accept the client.' });
             }
 
+            // Generate default password
+            const defaultPassword = `${client.companyName}@123`;
+            const hashedPassword = await hashPassword(defaultPassword);
+
             // Update the client status to 'Accepted' and connect to the Team Leader
             client.status = 'Accepted';
             client.teamLeader = teamLeaderId;
+            client.password = hashedPassword;
 
             // Save the updated client information
             await client.save();
@@ -127,12 +133,37 @@ const onboardClient = async (req, res) => {
             // Add the client ID to the Team Leader's clients array
             const updateResult = await TeamLeader.findByIdAndUpdate(
                 teamLeaderId,
-                { $addToSet: { clients: clientId } }, // Use $addToSet to prevent duplicates
+                { $addToSet: { clients: clientId } },
                 { new: true }
             );
 
             if (!updateResult) {
                 return res.status(404).json({ message: 'Team Leader not found' });
+            }
+
+            // Send onboarding email to client
+            const emailContent = `
+                <h2>Welcome to MabiconsERP!</h2>
+                <p>Dear ${client.name},</p>
+                <p>Your account has been successfully activated. You can now login to your dashboard using the following credentials:</p>
+                <p><strong>Email:</strong> ${client.email}</p>
+                <p><strong>Default Password:</strong> ${defaultPassword}</p>
+                <p>For security reasons, we recommend changing your password after your first login.</p>
+                <p>You can access your dashboard at: <a href="[YOUR_DASHBOARD_URL]">[YOUR_DASHBOARD_URL]</a></p>
+                <p>If you have any questions or need assistance, please don't hesitate to contact our support team.</p>
+                <p>Best regards,<br>MabiconsERP Team</p>
+            `;
+
+            try {
+                await sendEmail({
+                    email: client.email,
+                    name: client.name,
+                    subject: 'Welcome to MabiconsERP - Account Activated',
+                    htmlContent: emailContent
+                });
+            } catch (emailError) {
+                console.error('Error sending onboarding email:', emailError);
+                // Continue with the response even if email fails
             }
         } else {
             // Update the client status to 'Rejected'
@@ -140,6 +171,24 @@ const onboardClient = async (req, res) => {
 
             // Save the updated client information
             await client.save();
+
+            // Optionally, send rejection email
+            try {
+                await sendEmail({
+                    email: client.email,
+                    name: client.name,
+                    subject: 'MabiconsERP Application Status',
+                    htmlContent: `
+                        <p>Dear ${client.name},</p>
+                        <p>We regret to inform you that your application for MabiconsERP has been declined at this time.</p>
+                        <p>If you have any questions, please contact our support team.</p>
+                        <p>Best regards,<br>MabiconsERP Team</p>
+                    `
+                });
+            } catch (emailError) {
+                console.error('Error sending rejection email:', emailError);
+                // Continue with the response even if email fails
+            }
         }
 
         res.status(200).json({

@@ -1,16 +1,15 @@
 // controllers/employeeController.js
 const {Employee, TeamLeader, Task} = require('../models/models');
 const { hashPassword, comparePasswords } = require('../utils/bcryptUtils');
+const sendEmail = require('../utils/emailService');
 const { generateToken } = require('../utils/jwtUtils');
-const { getOrCreateFolder, uploadFileToDrive, getFileLink, deleteFile } = require('../utils/googleDriveServices');
-const formidable = require("formidable");
-const fs = require("fs/promises");
 
-// Function to create an Employee
+
+// Employee Creation with Email
 const createEmployee = async (req, res) => {
     try {
         const { name, email, teamLeaderIds, phone } = req.body;
-        const password = 'mabicons123';
+        const defaultPassword = 'mabicons123';
 
         // Validate input
         if (!name || !email || !teamLeaderIds || !teamLeaderIds.length) {
@@ -24,7 +23,7 @@ const createEmployee = async (req, res) => {
         }
 
         // Hash the password
-        const hashedPassword = await hashPassword(password);
+        const hashedPassword = await hashPassword(defaultPassword);
 
         // Create a new Employee
         const newEmployee = new Employee({
@@ -43,6 +42,30 @@ const createEmployee = async (req, res) => {
             { _id: { $in: teamLeaderIds } },
             { $push: { employees: newEmployee._id } }
         );
+
+        // Send welcome email to employee
+        const emailContent = `
+            <h2>Welcome to MabiconsERP!</h2>
+            <p>Dear ${name},</p>
+            <p>Your employee account has been created successfully. Here are your login credentials:</p>
+            <p><strong>Email:</strong> ${email}</p>
+            <p><strong>Default Password:</strong> ${defaultPassword}</p>
+            <p>For security reasons, please change your password after your first login.</p>
+            <p>You can access your dashboard at: <a href="[YOUR_DASHBOARD_URL]">[YOUR_DASHBOARD_URL]</a></p>
+            <p>If you have any questions, please contact your team leader or the admin.</p>
+            <p>Best regards,<br>MabiconsERP Team</p>
+        `;
+
+        try {
+            await sendEmail({
+                email: email,
+                name: name,
+                subject: 'Welcome to MabiconsERP - Employee Account Created',
+                htmlContent: emailContent
+            });
+        } catch (emailError) {
+            console.error('Error sending employee welcome email:', emailError);
+        }
 
         res.status(201).json({
             message: 'Employee created successfully',

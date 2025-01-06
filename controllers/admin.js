@@ -7,12 +7,10 @@ const crypto = require('crypto');
 const sendEmail = require('../utils/emailService');
 
 
-
-// Function to create a new Admin
 const createAdmin = async (req, res) => {
     try {
         const { name, email } = req.body;
-        const defaultPassword = 'mabicons123'; // Default password
+        const defaultPassword = 'mabicons123';
 
         // Check if all required fields are present
         if (!name || !email) {
@@ -37,6 +35,46 @@ const createAdmin = async (req, res) => {
 
         // Save the Admin to the database
         await admin.save();
+
+        // Send welcome email to admin
+        const emailContent = `
+            <h2>Welcome to MabiconsERP - Administrator Account</h2>
+            <p>Dear ${name},</p>
+            <p>Your Administrator account has been created successfully. Here are your login credentials:</p>
+            <p><strong>Email:</strong> ${email}</p>
+            <p><strong>Default Password:</strong> ${defaultPassword}</p>
+            <p>For security reasons, it is highly recommended to change your password immediately after your first login.</p>
+            <p>You can access the admin dashboard at: <a href="[YOUR_ADMIN_DASHBOARD_URL]">[YOUR_ADMIN_DASHBOARD_URL]</a></p>
+            <p>As an Administrator, you have access to:</p>
+            <ul>
+                <li>Create and manage Team Leaders</li>
+                <li>Monitor all client activities</li>
+                <li>Access system-wide reports and analytics</li>
+                <li>Manage system configurations</li>
+                <li>Handle user permissions and access controls</li>
+            </ul>
+            <p><strong>Important Security Notes:</strong></p>
+            <ul>
+                <li>Change your password immediately after logging in</li>
+                <li>Keep your login credentials secure</li>
+                <li>Never share your account information</li>
+                <li>Always log out after completing your session</li>
+            </ul>
+            <p>If you notice any suspicious activity or need technical assistance, please contact our IT support team immediately.</p>
+            <p>Best regards,<br>MabiconsERP System</p>
+        `;
+
+        try {
+            await sendEmail({
+                email: email,
+                name: name,
+                subject: 'Welcome to MabiconsERP - Administrator Account Created',
+                htmlContent: emailContent
+            });
+        } catch (emailError) {
+            console.error('Error sending admin welcome email:', emailError);
+            // Continue with the response even if email fails
+        }
 
         res.status(201).json({
             message: 'Admin created successfully',

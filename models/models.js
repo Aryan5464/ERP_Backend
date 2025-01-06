@@ -25,7 +25,6 @@ const addPasswordResetFields = (schema) => {
 // SuperAdmin Schema
 const superAdminSchema = new Schema({
     name: { type: String, required: true },
-    dp: { type: String },
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
     companyName: { type: String, required: true }
@@ -36,7 +35,6 @@ const SuperAdmin = mongoose.model('SuperAdmin', superAdminSchema);
 // Admin Schema
 const adminSchema = new Schema({
     name: { type: String, required: true },
-    dp: { type: String },
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
     teamLeaders: [{ type: Schema.Types.ObjectId, ref: 'TeamLeader' }]
@@ -49,7 +47,6 @@ const Admin = mongoose.model('Admin', adminSchema);
 
 const teamLeaderSchema = new Schema({
     name: { type: String, required: true },
-    dp: { type: String },
     email: { type: String, required: true, unique: true },
     phone: { type: String, required: false }, // Added phone number field
     password: { type: String, required: true },
@@ -66,7 +63,6 @@ const TeamLeader = mongoose.model('TeamLeader', teamLeaderSchema);
 // employee Schema 
 const employeeSchema = new Schema({
     name: { type: String, required: true },
-    dp: { type: String },
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
     phone: { type: String }, // Optional phone field
@@ -81,7 +77,6 @@ const Employee = mongoose.model('Employee', employeeSchema);
 // Client Schema
 const clientSchema = new Schema({
     name: { type: String, required: true },
-    dp: { type: String },
     email: { type: String, required: true, unique: true },
     contactNumber: { type: String },
     password: { type: String, required: true },
@@ -148,7 +143,6 @@ const requestedTaskSchema = new Schema({
     },
     rejectionReason: { type: String }, // Optional
 }, { timestamps: true });
-
 
 const RequestTask = mongoose.model('RequestedTask', requestedTaskSchema);
 

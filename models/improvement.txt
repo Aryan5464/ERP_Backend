@@ -1,0 +1,129 @@
+SuperAdmin Schema:
+// Add:
+role: { type: String, default: 'superadmin' },
+isActive: { type: Boolean, default: true },
+lastLogin: { type: Date },
+phoneNumber: { type: String },
+
+
+
+
+Admin Schema:
+// Add:
+role: { type: String, default: 'admin' },
+isActive: { type: Boolean, default: true },
+lastLogin: { type: Date },
+phoneNumber: { type: String },
+superAdmin: { type: Schema.Types.ObjectId, ref: 'SuperAdmin' },
+department: { type: String },
+
+
+
+
+TeamLeader Schema:
+// Add:
+role: { type: String, default: 'teamleader' },
+isActive: { type: Boolean, default: true },
+lastLogin: { type: Date },
+department: { type: String },
+expertise: [String],
+availability: {
+    from: { type: String },
+    to: { type: String }
+},
+maxTaskCapacity: { type: Number },
+currentTaskCount: { type: Number, default: 0 }
+
+
+
+
+Employee Schema:
+// Add:
+role: { type: String, default: 'employee' },
+isActive: { type: Boolean, default: true },
+lastLogin: { type: Date },
+department: { type: String },
+skills: [String],
+designation: { type: String },
+availability: {
+    from: { type: String },
+    to: { type: String }
+},
+maxTaskCapacity: { type: Number },
+currentTaskCount: { type: Number, default: 0 }
+
+
+
+
+Client Schema: 
+// Add:
+industry: { type: String },
+size: { type: String, enum: ['Small', 'Medium', 'Large'] },
+billingInfo: {
+    billingAddress: { type: String },
+    billingCycle: { type: String },
+    paymentTerms: { type: String }
+},
+preferences: {
+    communicationChannel: { type: String },
+    reportingFrequency: { type: String }
+},
+contractDetails: {
+    startDate: { type: Date },
+    endDate: { type: Date },
+    terms: { type: String }
+}
+
+
+
+
+Task Schema:
+// Add:
+attachments: [{
+    name: String,
+    url: String,
+    type: String
+}],
+comments: [{
+    user: { type: Schema.Types.ObjectId, refPath: 'userType' },
+    userType: { type: String, enum: ['TeamLeader', 'Employee', 'Client'] },
+    content: String,
+    createdAt: { type: Date, default: Date.now }
+}],
+progress: { type: Number, default: 0 },
+estimatedHours: { type: Number },
+actualHours: { type: Number },
+dependencies: [{ type: Schema.Types.ObjectId, ref: 'Task' }],
+history: [{
+    status: String,
+    changedBy: { type: Schema.Types.ObjectId, refPath: 'userType' },
+    userType: String,
+    timestamp: { type: Date, default: Date.now }
+}]
+
+
+
+
+Message Schema:
+// Add:
+status: { type: String, enum: ['sent', 'delivered', 'read'], default: 'sent' },
+replyTo: { type: Schema.Types.ObjectId, ref: 'Message' },
+attachments: [{
+    name: String,
+    url: String,
+    type: String,
+    size: Number
+}]
+New Suggested Schema 
+
+
+
+- ActivityLog:
+const activityLogSchema = new Schema({
+    user: { type: Schema.Types.ObjectId, refPath: 'userType' },
+    userType: { type: String, enum: ['SuperAdmin', 'Admin', 'TeamLeader', 'Employee', 'Client'] },
+    action: { type: String },
+    details: { type: Object },
+    ipAddress: { type: String },
+    userAgent: { type: String }
+}, { timestamps: true });

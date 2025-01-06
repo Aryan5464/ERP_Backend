@@ -8,16 +8,17 @@ const { generateToken } = require('../utils/jwtUtils');
 const { getOrCreateFolder, uploadFileToDrive, getFileLink, deleteFile } = require('../utils/googleDriveServices');
 const formidable = require("formidable");
 const fs = require("fs/promises");
+const sendEmail = require('../utils/emailService');
 
-// Function to create a new TeamLeader
+// TeamLeader Creation with Email
 const createTeamLeader = async (req, res) => {
     try {
-        const { name, email, adminId, phone } = req.body; // Including phone number
-        const password = 'mabicons123'
+        const { name, email, adminId, phone } = req.body;
+        const defaultPassword = 'mabicons123';
 
         // Check if all required fields are present
         if (!name || !email || !adminId) {
-            return res.status(400).json({ message: 'All fields are required (name, email, password, adminId)' });
+            return res.status(400).json({ message: 'All fields are required (name, email, adminId)' });
         }
 
         // Find the Admin by ID
@@ -26,14 +27,14 @@ const createTeamLeader = async (req, res) => {
             return res.status(404).json({ message: 'Admin not found' });
         }
 
-        // Check if the email is already taken by another TeamLeader
+        // Check if the email is already taken
         const existingTeamLeader = await TeamLeader.findOne({ email });
         if (existingTeamLeader) {
             return res.status(409).json({ message: 'Email already in use' });
         }
 
-        // Hash the password before saving
-        const hashedPassword = await hashPassword(password);
+        // Hash the password
+        const hashedPassword = await hashPassword(defaultPassword);
 
         // Create the new TeamLeader
         const teamLeader = new TeamLeader({
@@ -41,15 +42,45 @@ const createTeamLeader = async (req, res) => {
             email,
             password: hashedPassword,
             admin: adminId,
-            phone // Save phone number if provided
+            phone
         });
 
-        // Save the TeamLeader to the database
+        // Save the TeamLeader
         await teamLeader.save();
 
-        // Update the Admin to add the new TeamLeader reference
+        // Update the Admin
         admin.teamLeaders.push(teamLeader._id);
         await admin.save();
+
+        // Send welcome email to team leader
+        const emailContent = `
+            <h2>Welcome to MabiconsERP!</h2>
+            <p>Dear ${name},</p>
+            <p>Your Team Leader account has been created successfully. Here are your login credentials:</p>
+            <p><strong>Email:</strong> ${email}</p>
+            <p><strong>Default Password:</strong> ${defaultPassword}</p>
+            <p>For security reasons, please change your password after your first login.</p>
+            <p>You can access your dashboard at: <a href="[YOUR_DASHBOARD_URL]">[YOUR_DASHBOARD_URL]</a></p>
+            <p>As a Team Leader, you will be responsible for:</p>
+            <ul>
+                <li>Managing your team members</li>
+                <li>Overseeing client projects</li>
+                <li>Coordinating with other team leaders</li>
+            </ul>
+            <p>If you have any questions, please contact your admin.</p>
+            <p>Best regards,<br>MabiconsERP Team</p>
+        `;
+
+        try {
+            await sendEmail({
+                email: email,
+                name: name,
+                subject: 'Welcome to MabiconsERP - Team Leader Account Created',
+                htmlContent: emailContent
+            });
+        } catch (emailError) {
+            console.error('Error sending team leader welcome email:', emailError);
+        }
 
         res.status(201).json({
             message: 'TeamLeader created successfully',
@@ -57,7 +88,7 @@ const createTeamLeader = async (req, res) => {
                 id: teamLeader._id,
                 name: teamLeader.name,
                 email: teamLeader.email,
-                phone: teamLeader.phone // Include phone in response
+                phone: teamLeader.phone
             }
         });
     } catch (error) {
