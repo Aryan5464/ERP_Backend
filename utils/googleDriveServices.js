@@ -124,7 +124,7 @@ const uploadFile = async (fileObject) => {
       // Prepare file metadata
       const fileMetadata = {
           name: safeFileName,
-          parents: [process.env.GOOGLE_DRIVE_FOLDER_ID], // Use environment variable
+          parents: '', // Use environment variable
           description: `Uploaded via Chat on ${new Date().toLocaleString()}`
       };
 

@@ -662,7 +662,7 @@ const getClientDocuments = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Error fetching documents',
-            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+            error: 'Internal server error'
         });
     }
 };

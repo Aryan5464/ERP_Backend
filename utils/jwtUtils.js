@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const JWT_SECRET = process.env.JWT_SECRET;  // Ensure this environment variable is set
+const JWT_SECRET = 'Aryan';  // Ensure this environment variable is set
 
 // Function to generate a JWT token
 const generateToken = (payload) => {

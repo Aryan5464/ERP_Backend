@@ -20,7 +20,7 @@ const sendEmail = async (options) => {
             {
                 headers: {
                     'accept': 'application/json',
-                    'api-key': process.env.BREVO_API_KEY,
+                    'api-key': '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',
                     'content-type': 'application/json'
                 }
             }

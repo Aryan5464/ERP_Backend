@@ -45,7 +45,7 @@ const forgotPassword = async (req, res) => {
         await user.save({ validateBeforeSave: false });
 
         // Create reset URL
-        const resetURL = `${process.env.FRONTEND_URL}/reset-password/${userType}/${resetToken}`;
+        const resetURL = `$https://mab-erp.vercel.app/reset-password/${userType}/${resetToken}`;
 
         const htmlContent = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
