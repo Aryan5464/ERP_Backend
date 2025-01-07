@@ -18,6 +18,8 @@ const io = socketIO(server, { // Add this
     }
 });
 
+const PORT = process.env.PORT || 3000;
+
 app.use(express.json());
 app.use(cors());
 const dbConnect = require('./db/db')
@@ -167,9 +169,7 @@ restartCronJobs();
 seedSuperAdmin();
 
 // Change app.listen to server.listen
-server.listen(3000, () => {
-    console.log(`Server listening at PORT -> ${3000}`);
-});
+server.listen(PORT);
 
 dbConnect();
 
