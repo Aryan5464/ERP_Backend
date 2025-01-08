@@ -168,7 +168,7 @@ restartCronJobs();
 seedSuperAdmin();
 
 // Change app.listen to server.listen
-server.listen(PORT);
+server.listen(PORT, console.log("----------Server Listening at port: " + PORT + "----------"));
 
 dbConnect();
 
