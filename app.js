@@ -13,8 +13,7 @@ const server = http.createServer(app); // Add this
 // Initialize Socket.IO
 const io = socketIO(server, { // Add this
     cors: {
-        origin: "*", // Replace with your frontend URL
-        methods: ["GET", "POST"]
+        origin: "*", 
     }
 });
 
