@@ -34,9 +34,9 @@ const clientRoutes = require('./routes/client')
 const taskRoutes = require('./routes/task');
 const notificationRoutes = require('./routes/notification');
 const chatRoutes = require('./routes/chat');
-const authRoutes = require('./routes/authRoutes');
-const { restartCronJobs } = require('./controllers/task');
+const authRoutes = require('./routes/authRoutes'); 
 const { uploadFile } = require('./utils/googleDriveServices');
+const { restartCronJobs } = require('./controllers/task_cron');
 
 // Store connected users
 const connectedUsers = new Map();

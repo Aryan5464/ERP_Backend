@@ -131,7 +131,6 @@ const requestedTaskSchema = new Schema({
     },
     frequency: {
         type: String,
-        enum: ['Every Monday', 'Every Tuesday', 'Every 15th Day of Month', 'Every Saturday', 'systum', 'systum'],
         default: null
     }, // Only for frequency-based tasks
     dueDate: { type: Date }, // Only for deadline-based tasks
@@ -168,7 +167,6 @@ const taskSchema = new Schema({
     dueDate: { type: Date },
     frequency: {
         type: String,
-        enum: ['Every Monday', 'Every Tuesday', 'Every 15th Day of Month', 'Every Saturday', 'systum', 'systum'],
         default: null
     }, // Only set if this is a frequency-based task
     priority: { type: String, enum: ['Low', 'Medium', 'High'], default: 'Medium' },
@@ -184,7 +182,6 @@ const recurringTaskSchema = new Schema({
     client: { type: Schema.Types.ObjectId, ref: 'Client', required: true },
     frequency: {
         type: String,
-        enum: ['Every Monday', 'Every Tuesday', 'Every 15th Day of Month', 'Every Saturday', 'systum'],
         required: true
     },
     assignedTo: {

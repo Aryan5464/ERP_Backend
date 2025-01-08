@@ -1,90 +1,8 @@
-const mongoose = require('mongoose');
-const cron = require('node-cron');
+
 const { RequestTask, Task, TeamLeader, Employee, Client, RecurringTask } = require('../models/models');
 const { addNotification } = require('./notification');
+const { scheduleCronJob } = require('./task_cron');
 
-const cronJobs = {}; // This stores active cron jobs by their task ID.
-
-const getCronExpressionFromFrequency = (frequency) => {
-    switch (frequency) {
-        case 'systum':
-            return "55 3 * * *"
-        case 'Every Monday':
-            return '0 0 * * 1'; // Every Monday at midnight
-        case 'Every Tuesday':
-            return '0 0 * * 2'; // Every Tuesday at midnight
-        case 'Every 15th Day of Month':
-            return '0 0 15 * *'; // 15th of each month at midnight
-        case 'Every Saturday':
-            return '0 0 * * 6'; // Every Saturday at midnight
-        default:
-            return null;
-    }
-};
-
-const scheduleCronJob = async (recurringTask) => {
-    const cronExpression = getCronExpressionFromFrequency(recurringTask.frequency);
-
-    if (cronExpression) {
-        const job = cron.schedule(cronExpression, async () => {
-            try {
-                // Get client details to fetch teamLeaderId
-                const client = await Client.findById(recurringTask.client);
-                if (!client || !client.teamLeader) {
-                    throw new Error('Client not found or no team leader assigned');
-                }
-
-                const teamLeaderId = client.teamLeader;
-
-                const newTask = new Task({
-                    title: recurringTask.title,
-                    description: recurringTask.description,
-                    client: recurringTask.client,
-                    category: 'Frequency',
-                    assignedTo: recurringTask.assignedTo,
-                    priority: recurringTask.priority,
-                    parentTaskId: recurringTask._id,
-                    dueDate: new Date() // Optional: Adjust logic to set a meaningful due date
-                });
-
-                const savedTask = await newTask.save();
-
-                // Modified Promise.all to always update TeamLeader's tasks
-                await Promise.all([
-                    Client.findByIdAndUpdate(recurringTask.client, { $push: { tasks: savedTask._id } }),
-                    TeamLeader.findByIdAndUpdate(teamLeaderId, { $push: { tasks: savedTask._id } }),
-                    // Only update Employee's tasks if assigned to an employee
-                    ...(recurringTask.assignedTo.userType === 'Employee'
-                        ? [Employee.findByIdAndUpdate(recurringTask.assignedTo.userId, { $push: { tasks: savedTask._id } })]
-                        : [])
-                ]);
-
-                // Add notification for the newly created recurring task instance
-                try {
-                    const notificationMessage = `New recurring task "${recurringTask.title}" has been automatically created and assigned to you.`;
-
-                    await addNotification(
-                        recurringTask.assignedTo.userId,
-                        recurringTask.assignedTo.userType,
-                        notificationMessage
-                    );
-                } catch (notificationError) {
-                    console.error('Error sending notification for recurring task:', notificationError);
-                    // Continue execution even if notification fails
-                }
-
-                console.log(`Task created and references updated via cron job: ${savedTask._id}`);
-            } catch (error) {
-                console.error('Error creating task via cron job:', error);
-            }
-        });
-
-        cronJobs[recurringTask._id] = job;
-        console.log(`Cron job scheduled for recurring task: ${recurringTask._id}`);
-    } else {
-        console.warn(`Invalid frequency for recurring task: ${recurringTask._id}`);
-    }
-};
 
 
 // Function for a client to request a task
@@ -758,21 +676,7 @@ const getRecurringTasksByClient = async (req, res) => {
 
 
 // Function to restart cron jobs on server restart
-const restartCronJobs = async () => {
-    try {
-        console.log('Restarting cron jobs...');
 
-        const recurringTasks = await RecurringTask.find({ active: true });
-
-        for (const recurringTask of recurringTasks) {
-            await scheduleCronJob(recurringTask);
-        }
-
-        console.log('All cron jobs restarted successfully.');
-    } catch (error) {
-        console.error('Error restarting cron jobs:', error);
-    }
-};
 
 module.exports = {
     requestTask,
@@ -790,5 +694,4 @@ module.exports = {
     getTasksByAssignedUser,
     deleteOrDeactivateRecurringTask,
     getRecurringTasksByClient,
-    restartCronJobs,
 };
