@@ -326,19 +326,7 @@ const getClientDetails = async (req, res) => {
 
 const getAllClients = async (req, res) => {
     try {
-        // Add filtering options
-        const filter = {};
-        if (req.query.status) filter.status = req.query.status;
-        if (req.query.search) {
-            filter.$or = [
-                { name: { $regex: req.query.search, $options: 'i' } },
-                { email: { $regex: req.query.search, $options: 'i' } },
-                { companyName: { $regex: req.query.search, $options: 'i' } }
-            ];
-        }
-
-        // Find all clients with filtering
-        const clients = await Client.find(filter)
+        const clients = await Client.find()
             .populate('teamLeader', 'name email phone')
             .select('name email companyName corporateAddress contactNumber gstNumber panNumber cinNumber status teamLeader createdAt')
             .sort({ createdAt: -1 });
@@ -353,7 +341,7 @@ const getAllClients = async (req, res) => {
         });
     } catch (error) {
         console.error('Error retrieving clients:', error);
-        res.status(500).json({ 
+        res.status(500).json({
             success: false,
             message: 'Error retrieving clients',
             error: process.env.NODE_ENV === 'development' ? error.message : undefined
@@ -434,7 +422,7 @@ const editClient = async (req, res) => {
         });
     } catch (error) {
         console.error('Error updating client:', error);
-        res.status(500).json({ 
+        res.status(500).json({
             success: false,
             message: 'Error updating client',
             error: process.env.NODE_ENV === 'development' ? error.message : undefined
