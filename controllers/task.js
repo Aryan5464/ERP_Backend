@@ -1,7 +1,7 @@
 
 const { RequestTask, Task, TeamLeader, Employee, Client, RecurringTask } = require('../models/models');
 const { addNotification } = require('./notification');
-const { scheduleCronJob } = require('./task_cron');
+const { scheduleCronJob, cronJobs } = require('./task_cron');
 
 
 
@@ -335,7 +335,7 @@ const createTaskByTL = async (req, res) => {
             await Promise.all([
                 Client.findByIdAndUpdate(clientId, { $push: { tasks: newTask._id } }),
                 TeamLeader.findByIdAndUpdate(teamLeaderId, { $push: { tasks: newTask._id } }),
-                ...(assignedUserType === 'Employee' 
+                ...(assignedUserType === 'Employee'
                     ? [Employee.findByIdAndUpdate(assignedUserId, { $push: { tasks: newTask._id } })]
                     : [])
             ]);
@@ -549,31 +549,6 @@ const getClientTasks = async (req, res) => {
     }
 };
 
-
-// Recurring Task Functions -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-const getAllRecurringTasks = async (req, res) => {
-    try {
-        // Fetch all recurring tasks from the database
-        const recurringTasks = await RecurringTask.find()
-            .populate('client', 'name email companyName') // Populate client details
-            .populate('assignedTo.userId', 'name email') // Populate assigned user details
-            .sort({ createdAt: -1 }); // Sort by creation date (newest first)
-
-        if (!recurringTasks.length) {
-            return res.status(404).json({ message: 'No recurring tasks found.' });
-        }
-
-        res.status(200).json({
-            message: 'All recurring tasks fetched successfully.',
-            recurringTasks
-        });
-    } catch (error) {
-        console.error('Error fetching recurring tasks:', error);
-        res.status(500).json({ message: 'Server error while fetching recurring tasks.', error: error.message });
-    }
-};
-
 const getTasksByAssignedUser = async (req, res) => {
     try {
         const { userId } = req.body;
@@ -603,45 +578,27 @@ const getTasksByAssignedUser = async (req, res) => {
     }
 };
 
+// Recurring Task Functions -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-const deleteOrDeactivateRecurringTask = async (req, res) => {
+const getAllRecurringTasks = async (req, res) => {
     try {
-        const { recurringTaskId, action } = req.body;
+       
+        const recurringTasks = await RecurringTask.find()
+            .populate('client', 'name email companyName')
+            .populate('assignedTo.userId', 'name email')
+            .sort({ createdAt: -1 });
 
-        // Validate input
-        if (!recurringTaskId || !action) {
-            return res.status(400).json({ message: 'Recurring Task ID and action are required.' });
-        }
-
-        // Fetch the recurring task
-        const recurringTask = await RecurringTask.findById(recurringTaskId);
-        if (!recurringTask) {
-            return res.status(404).json({ message: 'Recurring task not found.' });
-        }
-
-        // Stop the cron job
-        if (cronJobs[recurringTaskId]) {
-            cronJobs[recurringTaskId].stop();
-            delete cronJobs[recurringTaskId];
-        }
-
-        if (action === 'delete') {
-            // Delete the recurring task
-            await RecurringTask.findByIdAndDelete(recurringTaskId);
-
-            return res.status(200).json({ message: 'Recurring task deleted and cron job stopped successfully.' });
-        } else if (action === 'deactivate') {
-            // Deactivate the recurring task
-            recurringTask.active = false;
-            await recurringTask.save();
-
-            return res.status(200).json({ message: 'Recurring task deactivated and cron job stopped successfully.' });
-        } else {
-            return res.status(400).json({ message: 'Invalid action. Use "delete" or "deactivate".' });
-        }
+        res.status(200).json({
+            message: recurringTasks.length ? 'Recurring tasks fetched successfully.' : 'No recurring tasks found.',
+            totalTasks: recurringTasks.length,
+            recurringTasks
+        });
     } catch (error) {
-        console.error('Error deleting or deactivating recurring task:', error);
-        return res.status(500).json({ message: 'Server error.' });
+        console.error('Error fetching recurring tasks:', error);
+        res.status(500).json({ 
+            message: 'Server error while fetching recurring tasks.', 
+            error: error.message 
+        });
     }
 };
 
@@ -649,28 +606,173 @@ const getRecurringTasksByClient = async (req, res) => {
     try {
         const { clientId } = req.body;
 
-        // Validate if clientId is provided
+        // Validate input
         if (!clientId) {
-            return res.status(400).json({ message: 'Client ID is required.' });
+            return res.status(400).json({ 
+                message: 'Client ID is required.',
+                required: ['clientId']
+            });
         }
 
-        // Fetch recurring tasks associated with the client
-        const recurringTasks = await RecurringTask.find({ client: clientId })
+        // Verify client exists
+        const clientExists = await Client.exists({ _id: clientId });
+        if (!clientExists) {
+            return res.status(404).json({ 
+                message: 'Client not found.',
+                clientId
+            });
+        }
+
+        // Add filters
+        const filter = { client: clientId };
+        if (req.query.active !== undefined) {
+            filter.active = req.query.active === 'true';
+        }
+
+        const recurringTasks = await RecurringTask.find(filter)
+            .populate('client', 'name email companyName')
+            .populate('assignedTo.userId', 'name email')
+            .sort({ createdAt: -1 });
+
+        res.status(200).json({
+            message: recurringTasks.length 
+                ? `Recurring tasks for client fetched successfully.`
+                : 'No recurring tasks found for this client.',
+            clientId,
+            totalTasks: recurringTasks.length,
+            recurringTasks
+        });
+    } catch (error) {
+        console.error('Error fetching recurring tasks:', error);
+        res.status(500).json({ 
+            message: 'Server error while fetching recurring tasks.',
+            error: error.message
+        });
+    }
+};
+
+const deleteOrDeactivateRecurringTask = async (req, res) => {
+    try {
+        const { recurringTaskId, action } = req.body;
+
+        // Input validation
+        if (!recurringTaskId || !action) {
+            return res.status(400).json({ 
+                message: 'Recurring Task ID and action are required.',
+                required: ['recurringTaskId', 'action']
+            });
+        }
+
+        if (!['delete', 'deactivate'].includes(action)) {
+            return res.status(400).json({ 
+                message: 'Invalid action. Use "delete" or "deactivate".',
+                allowedActions: ['delete', 'deactivate']
+            });
+        }
+
+        // Fetch the recurring task
+        const recurringTask = await RecurringTask.findById(recurringTaskId);
+        if (!recurringTask) {
+            return res.status(404).json({ 
+                message: 'Recurring task not found.',
+                taskId: recurringTaskId
+            });
+        }
+
+        // Stop the cron job if exists
+        if (cronJobs[recurringTaskId]) {
+            cronJobs[recurringTaskId].stop();
+            delete cronJobs[recurringTaskId];
+        }
+
+        // Perform action
+        if (action === 'delete') {
+            await RecurringTask.findByIdAndDelete(recurringTaskId);
+            return res.status(200).json({ 
+                message: 'Recurring task deleted and cron job stopped successfully.',
+                taskId: recurringTaskId
+            });
+        } else {
+            recurringTask.active = false;
+            await recurringTask.save();
+            return res.status(200).json({ 
+                message: 'Recurring task deactivated and cron job stopped successfully.',
+                taskId: recurringTaskId,
+                task: recurringTask
+            });
+        }
+    } catch (error) {
+        console.error('Error deleting or deactivating recurring task:', error);
+        return res.status(500).json({ 
+            message: 'Server error.',
+            error: error.message
+        });
+    }
+};
+
+
+const getRecurringTasksByTeamLeader = async (req, res) => {
+    try {
+        const { teamLeaderId } = req.body;
+
+        // Validate if teamLeaderId is provided
+        if (!teamLeaderId) {
+            return res.status(400).json({ message: 'Team Leader ID is required.' });
+        }
+
+        // First, find the team leader and their associated clients
+        const teamLeader = await TeamLeader.findById(teamLeaderId)
+            .populate('clients');
+
+        if (!teamLeader) {
+            return res.status(404).json({ message: 'Team Leader not found.' });
+        }
+
+        // Get array of client IDs associated with the team leader
+        const clientIds = teamLeader.clients.map(client => client._id);
+
+        // Fetch recurring tasks for all clients associated with the team leader
+        const recurringTasks = await RecurringTask.find({
+            client: { $in: clientIds }
+        })
             .populate('client', 'name email companyName') // Populate client details
             .populate('assignedTo.userId', 'name email') // Populate assigned user details
             .sort({ createdAt: -1 }); // Sort by creation date (newest first)
 
         if (!recurringTasks.length) {
-            return res.status(404).json({ message: 'No recurring tasks found for the specified client.' });
+            return res.status(404).json({
+                message: 'No recurring tasks found for clients associated with this team leader.'
+            });
         }
 
+        // Group tasks by client for better organization (optional)
+        const tasksGroupedByClient = recurringTasks.reduce((acc, task) => {
+            const clientId = task.client._id.toString();
+            if (!acc[clientId]) {
+                acc[clientId] = {
+                    clientName: task.client.name,
+                    companyName: task.client.companyName,
+                    tasks: []
+                };
+            }
+            acc[clientId].tasks.push(task);
+            return acc;
+        }, {});
+
         res.status(200).json({
-            message: `Recurring tasks for client: ${clientId} fetched successfully.`,
-            recurringTasks
+            message: 'Recurring tasks fetched successfully.',
+            teamLeaderName: teamLeader.name,
+            totalTasks: recurringTasks.length,
+            recurringTasks,
+            tasksGroupedByClient // Including grouped tasks for additional organization
         });
+
     } catch (error) {
-        console.error('Error fetching recurring tasks:', error);
-        res.status(500).json({ message: 'Server error while fetching recurring tasks.', error: error.message });
+        console.error('Error fetching recurring tasks for team leader:', error);
+        res.status(500).json({
+            message: 'Server error while fetching recurring tasks.',
+            error: error.message
+        });
     }
 };
 
@@ -688,10 +790,11 @@ module.exports = {
     createTaskByTL,
     getClientTasks,
 
+    getTasksByAssignedUser,
 
     // Recurring Tasks 
+    getRecurringTasksByTeamLeader,
     getAllRecurringTasks,
-    getTasksByAssignedUser,
     deleteOrDeactivateRecurringTask,
     getRecurringTasksByClient,
 };

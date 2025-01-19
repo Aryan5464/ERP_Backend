@@ -14,7 +14,8 @@ const {
     deleteOrDeactivateRecurringTask,
     getAllRecurringTasks,
     getTasksByAssignedUser,
-    getRecurringTasksByClient
+    getRecurringTasksByClient,
+    getRecurringTasksByTeamLeader
 } = require('../controllers/task');
 
 const router = express.Router();
@@ -45,6 +46,8 @@ router.post('/getTasksByAssignedUser', getTasksByAssignedUser);
 // Recurring Task functions-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 router.get('/getAllRecurringTasks', getAllRecurringTasks);
+
+router.post('/getRecurringTasksForTL', getRecurringTasksByTeamLeader);
 
 
 router.post('getRecurringTasksByClient', getRecurringTasksByClient);

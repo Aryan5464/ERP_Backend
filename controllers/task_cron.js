@@ -311,4 +311,5 @@ module.exports = {
     initializeRecurringTasks,
     getCronExpressionFromFrequency,
     restartCronJobs,
+    cronJobs
 };
