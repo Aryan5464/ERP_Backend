@@ -81,12 +81,14 @@ const clientSchema = new Schema({
     contactNumber: { type: String },
     password: { type: String, required: true },
     companyName: { type: String, required: true },
-    corporateAddress: { type: String }, // New field for corporate address
-    gstNumber: { type: String }, // GST Number
-    panNumber: { type: String }, // PAN field
+    corporateAddress: { type: String },
+    gstNumber: { type: String },
+    panNumber: { type: String },
     cinNumber: { type: String },
-    numberOfCompanies: { type: Number }, // Number of companies/firms
-    ownerDirectorDetails: [{ // Array to hold details of owners/directors
+    numberOfCompanies: { type: Number },
+    spocName: { type: String },      // Added SPOC Name
+    spocContact: { type: String },   // Added SPOC Contact
+    ownerDirectorDetails: [{
         name: { type: String, required: true },
         email: { type: String },
         contact: { type: String, required: true }
@@ -113,11 +115,6 @@ const clientSchema = new Schema({
     },
     teamLeader: { type: Schema.Types.ObjectId, ref: 'TeamLeader' },
     tasks: [{ type: Schema.Types.ObjectId, ref: 'Task' }],
-    // complianceInfo: {  // for future
-    //     credentials: { type: String }, // Credentials for compliance
-    //     applicability: { type: String }, // Applicability details
-    //     fyRecord: { type: String } // Record for the current financial year
-    // },
 }, { timestamps: true });
 addPasswordResetFields(clientSchema);
 const Client = mongoose.model('Client', clientSchema);

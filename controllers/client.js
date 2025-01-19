@@ -12,33 +12,34 @@ const sendEmail = require('../utils/emailService');
 
 const signupClient = async (req, res) => {
     try {
-        const {
-            name,
-            email,
-            companyName,
-            corporateAddress,
-            contactNumber,
-            gstNumber,
-            panNumber,
+        const { 
+            name, 
+            email, 
+            companyName, 
+            corporateAddress, 
+            contactNumber, 
+            gstNumber, 
+            panNumber, 
             cinNumber,
-            numberOfCompanies,
-            authorizedSignatory,
-            ownerDirectorDetails,
-            website
+            numberOfCompanies, 
+            spocName,           // Added SPOC Name
+            spocContact,        // Added SPOC Contact
+            authorizedSignatory, 
+            ownerDirectorDetails, 
+            website 
         } = req.body;
 
         // Validate required fields
-        if (!name || !email || !companyName || !corporateAddress ||
-            !contactNumber || !gstNumber || !panNumber || !cinNumber ||
-            !authorizedSignatory || !authorizedSignatory.name ||
-            !authorizedSignatory.contact || !Array.isArray(ownerDirectorDetails) ||
-            ownerDirectorDetails.length === 0) {
+        if (!name || !email || !companyName || !corporateAddress || 
+            !contactNumber || !gstNumber || !panNumber || !authorizedSignatory || 
+            !authorizedSignatory.name || !authorizedSignatory.contact || 
+            !Array.isArray(ownerDirectorDetails) || ownerDirectorDetails.length === 0) {
             return res.status(400).json({ message: 'All required fields must be filled out.' });
         }
 
         const password = `${companyName}@123`;
 
-        // Check for existing client with the same email
+        // Check for existing client
         const existingClient = await Client.findOne({ email });
         if (existingClient) {
             return res.status(409).json({ message: 'Email already in use' });
@@ -47,24 +48,25 @@ const signupClient = async (req, res) => {
         // Hash the password
         const hashedPassword = await hashPassword(password);
 
-        // Create a new client
-        const client = new Client({
-            name,
-            email,
-            password: hashedPassword,
-            companyName,
-            corporateAddress,
-            contactNumber,
-            gstNumber,
-            panNumber,
-            cinNumber,  // Add this new field
-            numberOfCompanies,
-            authorizedSignatory,
-            ownerDirectorDetails,
-            website
+        // Create new client
+        const client = new Client({ 
+            name, 
+            email, 
+            password: hashedPassword, 
+            companyName, 
+            corporateAddress, 
+            contactNumber, 
+            gstNumber, 
+            panNumber, 
+            cinNumber,
+            numberOfCompanies, 
+            spocName,
+            spocContact,
+            authorizedSignatory, 
+            ownerDirectorDetails, 
+            website 
         });
 
-        // Save the client to the database
         await client.save();
 
         res.status(201).json({
@@ -77,7 +79,9 @@ const signupClient = async (req, res) => {
                 status: client.status,
                 gstNumber: client.gstNumber,
                 panNumber: client.panNumber,
-                cinNumber: client.cinNumber, // Add this to the response
+                cinNumber: client.cinNumber,
+                spocName: client.spocName,
+                spocContact: client.spocContact,
                 website: client.website
             }
         });
@@ -271,25 +275,22 @@ const getClientDetails = async (req, res) => {
     try {
         const { clientId } = req.body;
 
-        // Validate client ID
-        if (!clientId || !mongoose.Types.ObjectId.isValid(clientId)) {
+        if (!clientId) {
             return res.status(400).json({
                 success: false,
-                message: 'Valid Client ID is required'
+                message: 'Client ID is required'
             });
         }
 
-        // Find client and populate essential relations
+        // Find client and populate teamLeader
         const client = await Client.findById(clientId)
-            .populate('teamLeader', 'name email phone')
             .populate({
-                path: 'tasks',
-                select: 'title description status dueDate priority createdAt updatedAt',
-                options: { sort: { 'createdAt': -1 } }
+                path: 'teamLeader',
+                select: 'name email phone'
             })
-            .select('-password'); // Exclude password from response
+            .select('-password')
+            .lean();
 
-        // Check if client exists
         if (!client) {
             return res.status(404).json({
                 success: false,
@@ -297,21 +298,68 @@ const getClientDetails = async (req, res) => {
             });
         }
 
-        // Send successful response
+        // Organize the response data
+        const clientData = {
+            // Basic Information
+            _id: client._id,
+            name: client.name,
+            email: client.email,
+            contactNumber: client.contactNumber,
+            status: client.status,
+
+            // Company Information
+            companyName: client.companyName,
+            corporateAddress: client.corporateAddress,
+            website: client.website,
+            numberOfCompanies: client.numberOfCompanies,
+
+            // Registration Numbers
+            gstNumber: client.gstNumber,
+            panNumber: client.panNumber,
+            cinNumber: client.cinNumber,
+
+            // SPOC Information
+            spocName: client.spocName,
+            spocContact: client.spocContact,
+
+            // Key Personnel
+            authorizedSignatory: {
+                name: client.authorizedSignatory?.name || null,
+                email: client.authorizedSignatory?.email || null,
+                contact: client.authorizedSignatory?.contact || null
+            },
+
+            // Owner/Director Details
+            ownerDirectorDetails: client.ownerDirectorDetails || [],
+
+            // Documents
+            documents: {
+                employeeMasterDatabase: client.documents?.employeeMasterDatabase || null,
+                currentSalaryStructure: client.documents?.currentSalaryStructure || null,
+                previousSalarySheets: client.documents?.previousSalarySheets || null,
+                currentHRPolicies: client.documents?.currentHRPolicies || null,
+                leaveBalance: client.documents?.leaveBalance || null,
+                companyLogo: client.documents?.companyLogo || null,
+                letterhead: client.documents?.letterhead || null
+            },
+
+            // Team Leader Information
+            teamLeader: client.teamLeader ? {
+                _id: client.teamLeader._id,
+                name: client.teamLeader.name,
+                email: client.teamLeader.email,
+                phone: client.teamLeader.phone
+            } : null,
+
+            // Timestamps
+            createdAt: client.createdAt,
+            updatedAt: client.updatedAt
+        };
+
         res.status(200).json({
             success: true,
-            data: {
-                ...client.toObject(),
-                documentsStatus: {
-                    employeeMasterDatabase: client.documents.employeeMasterDatabase ? true : false,
-                    currentSalaryStructure: client.documents.currentSalaryStructure ? true : false,
-                    previousSalarySheets: client.documents.previousSalarySheets ? true : false,
-                    currentHRPolicies: client.documents.currentHRPolicies ? true : false,
-                    leaveBalance: client.documents.leaveBalance ? true : false,
-                    companyLogo: client.documents.companyLogo ? true : false,
-                    letterhead: client.documents.letterhead ? true : false
-                }
-            }
+            message: 'Client details retrieved successfully',
+            data: clientData
         });
 
     } catch (error) {
@@ -328,7 +376,7 @@ const getAllClients = async (req, res) => {
     try {
         const clients = await Client.find()
             .populate('teamLeader', 'name email phone')
-            .select('name email companyName corporateAddress contactNumber gstNumber panNumber cinNumber status teamLeader createdAt')
+            .select('name email companyName corporateAddress contactNumber gstNumber panNumber cinNumber spocName spocContact status teamLeader createdAt')
             .sort({ createdAt: -1 });
 
         res.status(200).json({
@@ -341,14 +389,14 @@ const getAllClients = async (req, res) => {
         });
     } catch (error) {
         console.error('Error retrieving clients:', error);
-        res.status(500).json({
+        res.status(500).json({ 
             success: false,
-            message: 'Error retrieving clients',
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            message: 'Error retrieving clients'
         });
     }
 };
 
+// Edit Client Function
 const editClient = async (req, res) => {
     try {
         const {
@@ -362,70 +410,74 @@ const editClient = async (req, res) => {
             panNumber,
             cinNumber,
             numberOfCompanies,
+            spocName,
+            spocContact,
             website,
             authorizedSignatory,
             ownerDirectorDetails
         } = req.body;
 
-        // Validate client ID
-        if (!clientId || !mongoose.Types.ObjectId.isValid(clientId)) {
-            return res.status(400).json({ message: 'Valid Client ID is required' });
+        if (!clientId) {
+            return res.status(400).json({ message: 'Client ID is required' });
         }
 
-        // Find the client by ID
         const client = await Client.findById(clientId);
         if (!client) {
             return res.status(404).json({ message: 'Client not found' });
         }
 
-        // Create update object
-        const updates = {};
-        if (name) updates.name = name;
-        if (password) updates.password = await hashPassword(password);
-        if (companyName) updates.companyName = companyName;
-        if (corporateAddress) updates.corporateAddress = corporateAddress;
-        if (contactNumber) updates.contactNumber = contactNumber;
-        if (gstNumber) updates.gstNumber = gstNumber;
-        if (panNumber) updates.panNumber = panNumber;
-        if (cinNumber) updates.cinNumber = cinNumber;
-        if (numberOfCompanies !== undefined) updates.numberOfCompanies = numberOfCompanies;
-        if (website) updates.website = website;
+        // Update fields if provided
+        if (name) client.name = name;
+        if (password) client.password = await hashPassword(password);
+        if (companyName) client.companyName = companyName;
+        if (corporateAddress) client.corporateAddress = corporateAddress;
+        if (contactNumber) client.contactNumber = contactNumber;
+        if (gstNumber) client.gstNumber = gstNumber;
+        if (panNumber) client.panNumber = panNumber;
+        if (cinNumber) client.cinNumber = cinNumber;
+        if (numberOfCompanies !== undefined) client.numberOfCompanies = numberOfCompanies;
+        if (spocName) client.spocName = spocName;
+        if (spocContact) client.spocContact = spocContact;
+        if (website) client.website = website;
 
-        // Update authorized signatory if provided
         if (authorizedSignatory) {
-            updates.authorizedSignatory = {
-                ...client.authorizedSignatory,
-                ...authorizedSignatory
-            };
+            if (authorizedSignatory.name) client.authorizedSignatory.name = authorizedSignatory.name;
+            if (authorizedSignatory.email) client.authorizedSignatory.email = authorizedSignatory.email;
+            if (authorizedSignatory.contact) client.authorizedSignatory.contact = authorizedSignatory.contact;
         }
 
-        // Update owner/director details if provided
         if (Array.isArray(ownerDirectorDetails) && ownerDirectorDetails.length > 0) {
-            updates.ownerDirectorDetails = ownerDirectorDetails;
+            client.ownerDirectorDetails = ownerDirectorDetails;
         }
 
-        // Update client with new values
-        const updatedClient = await Client.findByIdAndUpdate(
-            clientId,
-            { $set: updates },
-            { new: true, runValidators: true }
-        ).select('-password');
-
-        if (!updatedClient) {
-            return res.status(404).json({ message: 'Client update failed' });
-        }
+        await client.save();
 
         res.status(200).json({
             success: true,
             message: 'Client updated successfully',
-            data: updatedClient
+            data: {
+                id: client._id,
+                name: client.name,
+                email: client.email,
+                companyName: client.companyName,
+                corporateAddress: client.corporateAddress,
+                contactNumber: client.contactNumber,
+                gstNumber: client.gstNumber,
+                panNumber: client.panNumber,
+                cinNumber: client.cinNumber,
+                spocName: client.spocName,
+                spocContact: client.spocContact,
+                numberOfCompanies: client.numberOfCompanies,
+                website: client.website,
+                authorizedSignatory: client.authorizedSignatory,
+                ownerDirectorDetails: client.ownerDirectorDetails
+            }
         });
     } catch (error) {
         console.error('Error updating client:', error);
-        res.status(500).json({
+        res.status(500).json({ 
             success: false,
-            message: 'Error updating client',
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            message: 'Error updating client' 
         });
     }
 };
