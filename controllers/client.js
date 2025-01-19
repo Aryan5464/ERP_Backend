@@ -1,7 +1,7 @@
 const { Client, TeamLeader } = require('../models/models');
 const { hashPassword, comparePasswords } = require('../utils/bcryptUtils');
 const { drive, getOrCreateFolder, updateFilePermissions } = require('../utils/googleDriveServices');
-const { generateToken } = require('../utils/jwtUtils'); 
+const { generateToken } = require('../utils/jwtUtils');
 // const fs = require("fs");
 const fs = require("fs/promises"); // Use the promise-based API 
 
@@ -12,12 +12,31 @@ const sendEmail = require('../utils/emailService');
 
 const signupClient = async (req, res) => {
     try {
-        const { name, email, password, companyName, corporateAddress, contactNumber, gstNumber, panNumber, numberOfCompanies, authorizedSignatory, ownerDirectorDetails, website } = req.body;
+        const {
+            name,
+            email,
+            companyName,
+            corporateAddress,
+            contactNumber,
+            gstNumber,
+            panNumber,
+            cinNumber,
+            numberOfCompanies,
+            authorizedSignatory,
+            ownerDirectorDetails,
+            website
+        } = req.body;
 
         // Validate required fields
-        if (!name || !email || !password || !companyName || !corporateAddress || !contactNumber || !gstNumber || !panNumber || !authorizedSignatory || !authorizedSignatory.name || !authorizedSignatory.contact || !Array.isArray(ownerDirectorDetails) || ownerDirectorDetails.length === 0) {
+        if (!name || !email || !companyName || !corporateAddress ||
+            !contactNumber || !gstNumber || !panNumber || !cinNumber ||
+            !authorizedSignatory || !authorizedSignatory.name ||
+            !authorizedSignatory.contact || !Array.isArray(ownerDirectorDetails) ||
+            ownerDirectorDetails.length === 0) {
             return res.status(400).json({ message: 'All required fields must be filled out.' });
         }
+
+        const password = `${companyName}@123`;
 
         // Check for existing client with the same email
         const existingClient = await Client.findOne({ email });
@@ -29,7 +48,21 @@ const signupClient = async (req, res) => {
         const hashedPassword = await hashPassword(password);
 
         // Create a new client
-        const client = new Client({ name, email, password: hashedPassword, companyName, corporateAddress, contactNumber, gstNumber, panNumber, numberOfCompanies, authorizedSignatory, ownerDirectorDetails, website });
+        const client = new Client({
+            name,
+            email,
+            password: hashedPassword,
+            companyName,
+            corporateAddress,
+            contactNumber,
+            gstNumber,
+            panNumber,
+            cinNumber,  // Add this new field
+            numberOfCompanies,
+            authorizedSignatory,
+            ownerDirectorDetails,
+            website
+        });
 
         // Save the client to the database
         await client.save();
@@ -44,6 +77,7 @@ const signupClient = async (req, res) => {
                 status: client.status,
                 gstNumber: client.gstNumber,
                 panNumber: client.panNumber,
+                cinNumber: client.cinNumber, // Add this to the response
                 website: client.website
             }
         });
@@ -100,79 +134,98 @@ const loginClient = async (req, res) => {
 const onboardClient = async (req, res) => {
     try {
         const { clientId, action, teamLeaderId } = req.body;
-                  
+
         // Validate required fields
         if (!clientId || !action || !['Accepted', 'Rejected'].includes(action)) {
             return res.status(400).json({ message: 'Client ID and a valid action (Accepted or Rejected) are required.' });
         }
 
-        // Find the client with 'Requested' status
-        const client = await Client.findOne({ _id: clientId, status: 'Requested' });
+        // Validate MongoDB ObjectId format
+        if (!mongoose.Types.ObjectId.isValid(clientId)) {
+            return res.status(400).json({ message: 'Invalid client ID format' });
+        }
+
+        // Find the client with populated teamLeader field
+        const client = await Client.findOne({ _id: clientId, status: 'Requested' })
+            .populate('teamLeader');
+
         if (!client) {
             return res.status(404).json({ message: 'Client not found or already processed' });
         }
 
         if (action === 'Accepted') {
-            // Ensure teamLeaderId is provided for accepted requests
-            if (!teamLeaderId) {
-                return res.status(400).json({ message: 'Team Leader ID is required to accept the client.' });
+            // Validate teamLeaderId
+            if (!teamLeaderId || !mongoose.Types.ObjectId.isValid(teamLeaderId)) {
+                return res.status(400).json({ message: 'Valid Team Leader ID is required to accept the client.' });
+            }
+
+            // Check if TeamLeader exists
+            const teamLeader = await TeamLeader.findById(teamLeaderId);
+            if (!teamLeader) {
+                return res.status(404).json({ message: 'Team Leader not found' });
+            }
+
+            // Check if client is already assigned to a team leader
+            if (client.teamLeader) {
+                return res.status(400).json({ message: 'Client is already assigned to a team leader' });
             }
 
             // Generate default password
             const defaultPassword = `${client.companyName}@123`;
             const hashedPassword = await hashPassword(defaultPassword);
 
-            // Update the client status to 'Accepted' and connect to the Team Leader
-            client.status = 'Accepted';
-            client.teamLeader = teamLeaderId;
-            client.password = hashedPassword;
-
-            // Save the updated client information
-            await client.save();
-
-            // Add the client ID to the Team Leader's clients array
-            const updateResult = await TeamLeader.findByIdAndUpdate(
-                teamLeaderId,
-                { $addToSet: { clients: clientId } },
-                { new: true }
-            );
-
-            if (!updateResult) {
-                return res.status(404).json({ message: 'Team Leader not found' });
-            }
-
-            // Send onboarding email to client
-            const emailContent = `
-                <h2>Welcome to MabiconsERP!</h2>
-                <p>Dear ${client.name},</p>
-                <p>Your account has been successfully activated. You can now login to your dashboard using the following credentials:</p>
-                <p><strong>Email:</strong> ${client.email}</p>
-                <p><strong>Default Password:</strong> ${defaultPassword}</p>
-                <p>For security reasons, we recommend changing your password after your first login.</p>
-                <p>You can access your dashboard at: <a href="[YOUR_DASHBOARD_URL]">[YOUR_DASHBOARD_URL]</a></p>
-                <p>If you have any questions or need assistance, please don't hesitate to contact our support team.</p>
-                <p>Best regards,<br>MabiconsERP Team</p>
-            `;
-
             try {
-                await sendEmail({
-                    email: client.email,
-                    name: client.name,
-                    subject: 'Welcome to MabiconsERP - Account Activated',
-                    htmlContent: emailContent
-                });
-            } catch (emailError) {
-                console.error('Error sending onboarding email:', emailError);
-                // Continue with the response even if email fails
-            }
-        } else {
-            // Update the client status to 'Rejected'
-            client.status = 'Rejected';
+                // Use transaction for atomic operations
+                const session = await mongoose.startSession();
+                await session.withTransaction(async () => {
+                    // Update client
+                    client.status = 'Accepted';
+                    client.teamLeader = teamLeaderId;
+                    client.password = hashedPassword;
+                    await client.save({ session });
 
-            // Save the updated client information
+                    // Update TeamLeader
+                    await TeamLeader.findByIdAndUpdate(
+                        teamLeaderId,
+                        { $addToSet: { clients: clientId } },
+                        { session, new: true }
+                    );
+                });
+                session.endSession();
+
+                // Send onboarding email
+                try {
+                    await sendEmail({
+                        email: client.email,
+                        name: client.name,
+                        subject: 'Welcome to MabiconsERP - Account Activated',
+                        htmlContent: `
+                            <h2>Welcome to MabiconsERP!</h2>
+                            <p>Dear ${client.name},</p>
+                            <p>Your account has been successfully activated. You can now login to your dashboard using the following credentials:</p>
+                            <p><strong>Email:</strong> ${client.email}</p>
+                            <p><strong>Default Password:</strong> ${defaultPassword}</p>
+                            <p>For security reasons, we recommend changing your password after your first login.</p>
+                            <p>You can access your dashboard at: <a href="https://erp.mabicons.com">https://erp.mabicons.com</a></p>
+                            <p>If you have any questions or need assistance, please don't hesitate to contact our support team.</p>
+                            <p>Best regards,<br>MabiconsERP Team</p>
+                        `
+                    });
+                } catch (emailError) {
+                    console.error('Error sending onboarding email:', emailError);
+                    // Log email error but continue with the process
+                }
+
+            } catch (transactionError) {
+                console.error('Transaction error:', transactionError);
+                return res.status(500).json({ message: 'Error updating client and team leader' });
+            }
+
+        } else {
+            // Handle rejection
+            client.status = 'Rejected';
             await client.save();
 
-            // Optionally, send rejection email
             try {
                 await sendEmail({
                     email: client.email,
@@ -187,7 +240,6 @@ const onboardClient = async (req, res) => {
                 });
             } catch (emailError) {
                 console.error('Error sending rejection email:', emailError);
-                // Continue with the response even if email fails
             }
         }
 
@@ -198,12 +250,20 @@ const onboardClient = async (req, res) => {
                 name: client.name,
                 email: client.email,
                 status: client.status,
-                teamLeader: client.teamLeader || null
+                teamLeader: client.teamLeader ? {
+                    id: client.teamLeader._id,
+                    name: client.teamLeader.name,
+                    email: client.teamLeader.email
+                } : null
             }
         });
+
     } catch (error) {
         console.error('Error onboarding client:', error);
-        res.status(500).json({ message: 'Server error' });
+        res.status(500).json({
+            message: 'Server error',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
     }
 };
 
@@ -212,17 +272,21 @@ const getClientDetails = async (req, res) => {
         const { clientId } = req.body;
 
         // Validate client ID
-        if (!clientId) {
+        if (!clientId || !mongoose.Types.ObjectId.isValid(clientId)) {
             return res.status(400).json({
                 success: false,
-                message: 'Client ID is required'
+                message: 'Valid Client ID is required'
             });
         }
 
         // Find client and populate essential relations
         const client = await Client.findById(clientId)
-            .populate('teamLeader', 'name email contactNumber')
-            .populate('tasks', 'title description status dueDate priority')
+            .populate('teamLeader', 'name email phone')
+            .populate({
+                path: 'tasks',
+                select: 'title description status dueDate priority createdAt updatedAt',
+                options: { sort: { 'createdAt': -1 } }
+            })
             .select('-password'); // Exclude password from response
 
         // Check if client exists
@@ -236,19 +300,66 @@ const getClientDetails = async (req, res) => {
         // Send successful response
         res.status(200).json({
             success: true,
-            data: client
+            data: {
+                ...client.toObject(),
+                documentsStatus: {
+                    employeeMasterDatabase: client.documents.employeeMasterDatabase ? true : false,
+                    currentSalaryStructure: client.documents.currentSalaryStructure ? true : false,
+                    previousSalarySheets: client.documents.previousSalarySheets ? true : false,
+                    currentHRPolicies: client.documents.currentHRPolicies ? true : false,
+                    leaveBalance: client.documents.leaveBalance ? true : false,
+                    companyLogo: client.documents.companyLogo ? true : false,
+                    letterhead: client.documents.letterhead ? true : false
+                }
+            }
         });
 
     } catch (error) {
         console.error('Error fetching client details:', error);
         res.status(500).json({
             success: false,
-            message: 'Error fetching client details'
+            message: 'Error fetching client details',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 };
 
+const getAllClients = async (req, res) => {
+    try {
+        // Add filtering options
+        const filter = {};
+        if (req.query.status) filter.status = req.query.status;
+        if (req.query.search) {
+            filter.$or = [
+                { name: { $regex: req.query.search, $options: 'i' } },
+                { email: { $regex: req.query.search, $options: 'i' } },
+                { companyName: { $regex: req.query.search, $options: 'i' } }
+            ];
+        }
 
+        // Find all clients with filtering
+        const clients = await Client.find(filter)
+            .populate('teamLeader', 'name email phone')
+            .select('name email companyName corporateAddress contactNumber gstNumber panNumber cinNumber status teamLeader createdAt')
+            .sort({ createdAt: -1 });
+
+        res.status(200).json({
+            success: true,
+            message: 'Clients retrieved successfully',
+            data: {
+                count: clients.length,
+                clients
+            }
+        });
+    } catch (error) {
+        console.error('Error retrieving clients:', error);
+        res.status(500).json({ 
+            success: false,
+            message: 'Error retrieving clients',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
 
 const editClient = async (req, res) => {
     try {
@@ -261,15 +372,16 @@ const editClient = async (req, res) => {
             contactNumber,
             gstNumber,
             panNumber,
+            cinNumber,
             numberOfCompanies,
             website,
             authorizedSignatory,
             ownerDirectorDetails
         } = req.body;
 
-        // Validate required fields
-        if (!clientId) {
-            return res.status(400).json({ message: 'Client ID is required' });
+        // Validate client ID
+        if (!clientId || !mongoose.Types.ObjectId.isValid(clientId)) {
+            return res.status(400).json({ message: 'Valid Client ID is required' });
         }
 
         // Find the client by ID
@@ -278,54 +390,55 @@ const editClient = async (req, res) => {
             return res.status(404).json({ message: 'Client not found' });
         }
 
-        // Update fields if provided
-        if (name) client.name = name;
-        if (password) {
-            client.password = await hashPassword(password);
-        }
-        if (companyName) client.companyName = companyName;
-        if (corporateAddress) client.corporateAddress = corporateAddress;
-        if (contactNumber) client.contactNumber = contactNumber;
-        if (gstNumber) client.gstNumber = gstNumber;
-        if (panNumber) client.panNumber = panNumber;
-        if (numberOfCompanies !== undefined) client.numberOfCompanies = numberOfCompanies; // Allow 0
-        if (website) client.website = website;
+        // Create update object
+        const updates = {};
+        if (name) updates.name = name;
+        if (password) updates.password = await hashPassword(password);
+        if (companyName) updates.companyName = companyName;
+        if (corporateAddress) updates.corporateAddress = corporateAddress;
+        if (contactNumber) updates.contactNumber = contactNumber;
+        if (gstNumber) updates.gstNumber = gstNumber;
+        if (panNumber) updates.panNumber = panNumber;
+        if (cinNumber) updates.cinNumber = cinNumber;
+        if (numberOfCompanies !== undefined) updates.numberOfCompanies = numberOfCompanies;
+        if (website) updates.website = website;
 
         // Update authorized signatory if provided
         if (authorizedSignatory) {
-            if (authorizedSignatory.name) client.authorizedSignatory.name = authorizedSignatory.name;
-            if (authorizedSignatory.email) client.authorizedSignatory.email = authorizedSignatory.email;
-            if (authorizedSignatory.contact) client.authorizedSignatory.contact = authorizedSignatory.contact;
+            updates.authorizedSignatory = {
+                ...client.authorizedSignatory,
+                ...authorizedSignatory
+            };
         }
 
         // Update owner/director details if provided
         if (Array.isArray(ownerDirectorDetails) && ownerDirectorDetails.length > 0) {
-            client.ownerDirectorDetails = ownerDirectorDetails;
+            updates.ownerDirectorDetails = ownerDirectorDetails;
         }
 
-        // Save updated client
-        await client.save();
+        // Update client with new values
+        const updatedClient = await Client.findByIdAndUpdate(
+            clientId,
+            { $set: updates },
+            { new: true, runValidators: true }
+        ).select('-password');
+
+        if (!updatedClient) {
+            return res.status(404).json({ message: 'Client update failed' });
+        }
 
         res.status(200).json({
+            success: true,
             message: 'Client updated successfully',
-            client: {
-                id: client._id,
-                name: client.name,
-                email: client.email,
-                companyName: client.companyName,
-                corporateAddress: client.corporateAddress,
-                contactNumber: client.contactNumber,
-                gstNumber: client.gstNumber,
-                panNumber: client.panNumber,
-                numberOfCompanies: client.numberOfCompanies,
-                website: client.website,
-                authorizedSignatory: client.authorizedSignatory,
-                ownerDirectorDetails: client.ownerDirectorDetails
-            }
+            data: updatedClient
         });
     } catch (error) {
         console.error('Error updating client:', error);
-        res.status(500).json({ message: 'Server error' });
+        res.status(500).json({ 
+            success: false,
+            message: 'Error updating client',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
     }
 };
 
@@ -351,23 +464,7 @@ const deleteClient = async (req, res) => {
     }
 };
 
-// Function to retrieve all clients
-const getAllClients = async (req, res) => {
-    try {
-        // Find all clients and populate the team leader information
-        const clients = await Client.find()
-            .populate('teamLeader', 'name email') // Populate team leader's name and email
-            .select('name email companyName companyAddress contactNumber gstNumber status teamLeader'); // Select necessary fields including gstNumber
 
-        res.status(200).json({
-            message: 'Clients retrieved successfully',
-            clients
-        });
-    } catch (error) {
-        console.error('Error retrieving clients:', error);
-        res.status(500).json({ message: 'Server error' });
-    }
-};
 
 const getClientsForTeamLeader = async (req, res) => {
     try {
@@ -426,15 +523,17 @@ const uploadDocuments = async (req, res) => {
         'currentSalaryStructure',
         'previousSalarySheets',
         'currentHRPolicies',
-        'leaveBalance'
+        'leaveBalance',
+        'companyLogo',
+        'letterhead'
     ];
 
     try {
-        const bb = busboy({ 
+        const bb = busboy({
             headers: req.headers,
             limits: {
                 fileSize: 10 * 1024 * 1024,
-                files: 5
+                files: 7
             }
         });
 
@@ -470,7 +569,7 @@ const uploadDocuments = async (req, res) => {
 
                 fileInfos[fieldname] = info;
                 fileBuffers[fieldname] = [];
-                
+
                 file.on('data', data => {
                     fileBuffers[fieldname].push(data);
                 });
@@ -599,7 +698,6 @@ const getClientDocuments = async (req, res) => {
             return res.status(400).json({ message: 'Client ID is required' });
         }
 
-        // Find client
         const client = await Client.findById(clientId);
         if (!client) {
             return res.status(404).json({ message: 'Client not found' });
@@ -610,7 +708,9 @@ const getClientDocuments = async (req, res) => {
             'currentSalaryStructure',
             'previousSalarySheets',
             'currentHRPolicies',
-            'leaveBalance'
+            'leaveBalance',
+            'companyLogo',
+            'letterhead'
         ];
 
         const documentDetails = {};
@@ -620,13 +720,11 @@ const getClientDocuments = async (req, res) => {
             const fileId = client.documents[docType];
             if (fileId) {
                 try {
-                    // Get file metadata and generate links
                     const fileMetadata = await drive.files.get({
                         fileId: fileId,
                         fields: 'id, name, mimeType, webViewLink, webContentLink'
                     });
 
-                    // Ensure file is accessible
                     await updateFilePermissions(fileId);
 
                     documentDetails[docType] = {

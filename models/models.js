@@ -84,6 +84,7 @@ const clientSchema = new Schema({
     corporateAddress: { type: String }, // New field for corporate address
     gstNumber: { type: String }, // GST Number
     panNumber: { type: String }, // PAN field
+    cinNumber: { type: String },
     numberOfCompanies: { type: Number }, // Number of companies/firms
     ownerDirectorDetails: [{ // Array to hold details of owners/directors
         name: { type: String, required: true },
@@ -95,12 +96,14 @@ const clientSchema = new Schema({
         email: { type: String },
         contact: { type: String, required: true }
     },
-    documents: { // Nested structure for document links
-        employeeMasterDatabase: { type: String }, // URL or reference to uploaded file
-        currentSalaryStructure: { type: String },  // URL or reference to uploaded file
-        previousSalarySheets: { type: String }, // URL or reference to uploaded files
-        currentHRPolicies: { type: String }, // URL or reference to uploaded file
-        leaveBalance: { type: String } // Leave balance data till last month-end
+    documents: {
+        employeeMasterDatabase: { type: String },
+        currentSalaryStructure: { type: String },
+        previousSalarySheets: { type: String },
+        currentHRPolicies: { type: String },
+        leaveBalance: { type: String },
+        companyLogo: { type: String },
+        letterhead: { type: String }
     },
     website: { type: String },
     status: {
