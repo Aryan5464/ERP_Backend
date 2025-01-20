@@ -288,11 +288,19 @@ const getClientDetails = async (req, res) => {
             });
         }
 
-        // Find client and populate teamLeader
+        // Find client and populate both teamLeader and tasks
         const client = await Client.findById(clientId)
             .populate({
                 path: 'teamLeader',
                 select: 'name email phone'
+            })
+            .populate({
+                path: 'tasks',
+                select: 'title description status dueDate priority createdAt updatedAt assignedTo',
+                populate: {
+                    path: 'assignedTo',
+                    select: 'name email phone'
+                }
             })
             .select('-password')
             .lean();
@@ -356,6 +364,24 @@ const getClientDetails = async (req, res) => {
                 email: client.teamLeader.email,
                 phone: client.teamLeader.phone
             } : null,
+
+            // Tasks Information
+            tasks: client.tasks ? client.tasks.map(task => ({
+                _id: task._id,
+                title: task.title,
+                description: task.description,
+                status: task.status,
+                priority: task.priority,
+                dueDate: task.dueDate,
+                assignedTo: task.assignedTo ? {
+                    _id: task.assignedTo._id,
+                    name: task.assignedTo.name,
+                    email: task.assignedTo.email,
+                    phone: task.assignedTo.phone
+                } : null,
+                createdAt: task.createdAt,
+                updatedAt: task.updatedAt
+            })) : [],
 
             // Timestamps
             createdAt: client.createdAt,
