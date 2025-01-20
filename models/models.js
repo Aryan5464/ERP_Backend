@@ -168,7 +168,7 @@ const taskSchema = new Schema({
     frequency: {
         type: String,
         default: null
-    }, // Only set if this is a frequency-based task
+    }, 
     priority: { type: String, enum: ['Low', 'Medium', 'High'], default: 'Medium' },
     parentTaskId: { type: Schema.Types.ObjectId, ref: 'Task' }, // Reference for frequency tasks  
 }, { timestamps: true });
@@ -258,3 +258,6 @@ module.exports = {
     Notification,
     Message
 };
+
+
+

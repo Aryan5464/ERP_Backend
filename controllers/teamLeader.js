@@ -233,7 +233,7 @@ const deleteTeamLeaderWithReassignment = async (req, res) => {
         // Transfer Tasks
         await Task.updateMany(
             { teamLeader: teamLeaderId },
-            { 
+            {
                 $set: { teamLeader: newTeamLeaderId },
                 $push: {
                     history: {
@@ -250,7 +250,7 @@ const deleteTeamLeaderWithReassignment = async (req, res) => {
         // Update task assignments
         await Task.updateMany(
             { "assignedEmployees.userType": "TeamLeader", "assignedEmployees.userId": teamLeaderId },
-            { 
+            {
                 $set: { "assignedEmployees.$.userId": newTeamLeaderId }
             },
             { session }
@@ -324,9 +324,9 @@ const deleteTeamLeaderWithReassignment = async (req, res) => {
     } catch (error) {
         await session.abortTransaction();
         console.error('Error in team leader reassignment:', error);
-        res.status(500).json({ 
+        res.status(500).json({
             message: 'Server error during reassignment',
-            error: error.message 
+            error: error.message
         });
     } finally {
         session.endSession();
@@ -342,131 +342,161 @@ const deleteTeamLeaderAndPromoteEmployee = async (req, res) => {
     try {
         const { oldTeamLeaderId, employeeToPromoteId } = req.body;
 
-        // Validate inputs and fetch necessary documents
-        const [oldTeamLeader, employeeToPromote] = await Promise.all([
-            TeamLeader.findById(oldTeamLeaderId).populate('admin'),
-            Employee.findById(employeeToPromoteId)
-        ]);
-
-        if (!oldTeamLeader || !employeeToPromote) {
-            return res.status(404).json({ message: 'Team leader or employee not found' });
+        // Validate team leader ID
+        if (!mongoose.Types.ObjectId.isValid(oldTeamLeaderId)) {
+            return res.status(400).json({ message: 'Invalid Team Leader ID format' });
         }
 
-        // Create new team leader from employee
-        const newTeamLeader = new TeamLeader({
-            name: employeeToPromote.name,
-            email: employeeToPromote.email,
-            phone: employeeToPromote.phone,
-            password: employeeToPromote.password, // Maintain the same password
-            admin: oldTeamLeader.admin,
-            employees: oldTeamLeader.employees,
-            tasks: oldTeamLeader.tasks,
-            clients: oldTeamLeader.clients
-        });
+        // Fetch the team leader
+        const oldTeamLeader = await TeamLeader.findById(oldTeamLeaderId).populate('admin');
+        if (!oldTeamLeader) {
+            return res.status(404).json({ message: 'Team leader not found' });
+        }
 
-        await newTeamLeader.save({ session });
+        // If employeeToPromoteId is provided, handle promotion case
+        if (employeeToPromoteId) {
+            if (!mongoose.Types.ObjectId.isValid(employeeToPromoteId)) {
+                return res.status(400).json({ message: 'Invalid Employee ID format' });
+            }
 
-        // Update Admin's references
-        await Admin.findByIdAndUpdate(
-            oldTeamLeader.admin,
-            {
-                $pull: { teamLeaders: oldTeamLeaderId },
-                $push: { teamLeaders: newTeamLeader._id }
-            },
-            { session }
-        );
+            const employeeToPromote = await Employee.findById(employeeToPromoteId);
+            if (!employeeToPromote) {
+                return res.status(404).json({ message: 'Employee not found' });
+            }
 
-        // Update Employee references
-        await Employee.updateMany(
-            { teamLeaders: oldTeamLeaderId },
-            {
-                $pull: { teamLeaders: oldTeamLeaderId },
-                $push: { teamLeaders: newTeamLeader._id }
-            },
-            { session }
-        );
-
-        // Update Tasks
-        await Task.updateMany(
-            { teamLeader: oldTeamLeaderId },
-            { 
-                $set: { teamLeader: newTeamLeader._id },
-                $push: {
-                    history: {
-                        action: 'Team Leader Promotion',
-                        from: oldTeamLeaderId,
-                        to: newTeamLeader._id,
-                        date: new Date()
-                    }
-                }
-            },
-            { session }
-        );
-
-        // Update Clients
-        await Client.updateMany(
-            { teamLeader: oldTeamLeaderId },
-            { $set: { teamLeader: newTeamLeader._id } },
-            { session }
-        );
-
-        // Delete the old team leader and employee records
-        await Promise.all([
-            TeamLeader.findByIdAndDelete(oldTeamLeaderId, { session }),
-            Employee.findByIdAndDelete(employeeToPromoteId, { session })
-        ]);
-
-        // Send notifications
-        try {
-            // Notify the promoted employee
-            await sendEmail({
-                email: employeeToPromote.email,
+            // Create new team leader from employee
+            const newTeamLeader = new TeamLeader({
                 name: employeeToPromote.name,
-                subject: 'Promotion to Team Leader',
-                htmlContent: `
-                    <h2>Congratulations on Your Promotion!</h2>
-                    <p>You have been promoted to Team Leader.</p>
-                    <p>Your team leader dashboard is now available with all necessary tools and information.</p>
-                    <p>Please log in to review your new responsibilities and team members.</p>
-                `
+                email: employeeToPromote.email,
+                phone: employeeToPromote.phone,
+                password: employeeToPromote.password,
+                admin: oldTeamLeader.admin,
+                employees: oldTeamLeader.employees,
+                tasks: oldTeamLeader.tasks,
+                clients: oldTeamLeader.clients
             });
 
-            // Notify team members
-            const teamMembers = await Employee.find({ teamLeaders: oldTeamLeaderId });
-            for (const member of teamMembers) {
-                await sendEmail({
-                    email: member.email,
-                    name: member.name,
-                    subject: 'New Team Leader Announcement',
-                    htmlContent: `
-                        <h2>Team Leader Update</h2>
-                        <p>${employeeToPromote.name} has been promoted to Team Leader.</p>
-                        <p>Please congratulate them on their new role.</p>
-                    `
-                });
-            }
-        } catch (emailError) {
-            console.error('Error sending notification emails:', emailError);
+            await newTeamLeader.save({ session });
+
+            // Update references to new team leader
+            await Promise.all([
+                // Update Admin's references
+                Admin.findByIdAndUpdate(
+                    oldTeamLeader.admin,
+                    {
+                        $pull: { teamLeaders: oldTeamLeaderId },
+                        $push: { teamLeaders: newTeamLeader._id }
+                    },
+                    { session }
+                ),
+
+                // Update Employee references
+                Employee.updateMany(
+                    { teamLeaders: oldTeamLeaderId },
+                    {
+                        $pull: { teamLeaders: oldTeamLeaderId },
+                        $push: { teamLeaders: newTeamLeader._id }
+                    },
+                    { session }
+                ),
+
+                // Update Tasks where team leader is assigned
+                Task.updateMany(
+                    {
+                        'assignedTo.userType': 'TeamLeader',
+                        'assignedTo.userId': oldTeamLeaderId
+                    },
+                    {
+                        $set: { 'assignedTo.userId': newTeamLeader._id }
+                    },
+                    { session }
+                ),
+
+                // Update Clients
+                Client.updateMany(
+                    { teamLeader: oldTeamLeaderId },
+                    { $set: { teamLeader: newTeamLeader._id } },
+                    { session }
+                ),
+
+                // Delete old team leader and employee records
+                TeamLeader.findByIdAndDelete(oldTeamLeaderId, { session }),
+                Employee.findByIdAndDelete(employeeToPromoteId, { session })
+            ]);
+
+            await session.commitTransaction();
+
+            return res.status(200).json({
+                message: 'Team leader successfully deleted and employee promoted',
+                newTeamLeader: {
+                    id: newTeamLeader._id,
+                    name: newTeamLeader.name,
+                    email: newTeamLeader.email
+                }
+            });
+        } else {
+            // Handle case where no employee is to be promoted
+            await Promise.all([
+                // Remove team leader from Admin
+                Admin.findByIdAndUpdate(
+                    oldTeamLeader.admin,
+                    { $pull: { teamLeaders: oldTeamLeaderId } },
+                    { session }
+                ),
+
+                // Remove team leader from Employees
+                Employee.updateMany(
+                    { teamLeaders: oldTeamLeaderId },
+                    { $pull: { teamLeaders: oldTeamLeaderId } },
+                    { session }
+                ),
+
+                // Update Tasks to remove team leader assignments
+                Task.updateMany(
+                    {
+                        'assignedTo.userType': 'TeamLeader',
+                        'assignedTo.userId': oldTeamLeaderId
+                    },
+                    {
+                        $set: {
+                            'assignedTo.userType': null,
+                            'assignedTo.userId': null
+                        }
+                    },
+                    { session }
+                ),
+
+                // Update Clients to remove team leader
+                Client.updateMany(
+                    { teamLeader: oldTeamLeaderId },
+                    { $unset: { teamLeader: "" } },
+                    { session }
+                ),
+
+                // Delete the team leader
+                TeamLeader.findByIdAndDelete(oldTeamLeaderId, { session })
+            ]);
+
+            await session.commitTransaction();
+
+            return res.status(200).json({
+                message: 'Team leader successfully deleted and references removed',
+                deletedTeamLeader: {
+                    id: oldTeamLeader._id,
+                    name: oldTeamLeader.name,
+                    email: oldTeamLeader.email
+                }
+            });
         }
-
-        await session.commitTransaction();
-
-        res.status(200).json({
-            message: 'Team leader successfully deleted and employee promoted',
-            newTeamLeader: {
-                id: newTeamLeader._id,
-                name: newTeamLeader.name,
-                email: newTeamLeader.email
-            }
-        });
     } catch (error) {
         await session.abortTransaction();
-        console.error('Error in promotion process:', error);
-        res.status(500).json({ message: 'Server error during promotion process' });
+        console.error('Error in team leader deletion process:', error);
+        res.status(500).json({ message: 'Server error during team leader deletion process' });
     } finally {
         session.endSession();
     }
 };
+
 
 
 const getTeamLeaderHierarchy = async (req, res) => {
