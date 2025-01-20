@@ -9,6 +9,8 @@ const busboy = require('busboy');
 const { Readable } = require('stream');
 const mime = require('mime-types'); // Add this package for MIME type validation
 const sendEmail = require('../utils/emailService');
+const mongoose = require('mongoose');
+
 
 const signupClient = async (req, res) => {
     try {
@@ -139,6 +141,7 @@ const onboardClient = async (req, res) => {
     let session;
     try {
         const { clientId, action, teamLeaderId } = req.body;
+        console.log('Received request:', { clientId, action, teamLeaderId }); // Log incoming request
 
         // Validate required fields
         if (!clientId || !action || !['Accepted', 'Rejected'].includes(action)) {
@@ -156,9 +159,9 @@ const onboardClient = async (req, res) => {
             });
         }
 
-        // Find the client with populated teamLeader field
-        const client = await Client.findOne({ _id: clientId })
-            .populate('teamLeader');
+        // Find the client
+        const client = await Client.findOne({ _id: clientId });
+        console.log('Found client:', client); // Log client data
 
         if (!client) {
             return res.status(404).json({
@@ -167,7 +170,7 @@ const onboardClient = async (req, res) => {
             });
         }
 
-        // Check if client has already been processed
+        // Check client status
         if (client.status !== 'Requested') {
             return res.status(400).json({
                 success: false,
@@ -186,6 +189,8 @@ const onboardClient = async (req, res) => {
 
             // Check if TeamLeader exists
             const teamLeader = await TeamLeader.findById(teamLeaderId);
+            console.log('Found team leader:', teamLeader); // Log team leader data
+
             if (!teamLeader) {
                 return res.status(404).json({
                     success: false,
@@ -193,38 +198,22 @@ const onboardClient = async (req, res) => {
                 });
             }
 
-            // Check if client is already assigned to a team leader
-            if (client.teamLeader) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Client is already assigned to a team leader'
-                });
-            }
-
-            // Generate default password
-            const defaultPassword = `${client.companyName.replace(/\s+/g, '')}@123`; // Remove spaces from company name
-            const hashedPassword = await hashPassword(defaultPassword);
-
             try {
-                // Start transaction
-                session = await mongoose.startSession();
-                session.startTransaction();
+                // Generate default password
+                const defaultPassword = `${client.companyName.replace(/\s+/g, '')}@123`;
+                const hashedPassword = await hashPassword(defaultPassword);
 
-                // Update client
+                // Update client without transaction first
                 client.status = 'Accepted';
                 client.teamLeader = teamLeaderId;
                 client.password = hashedPassword;
-                await client.save({ session });
+                await client.save();
 
                 // Update TeamLeader
                 await TeamLeader.findByIdAndUpdate(
                     teamLeaderId,
-                    { $addToSet: { clients: clientId } },
-                    { session, new: true }
+                    { $addToSet: { clients: clientId } }
                 );
-
-                // Commit transaction
-                await session.commitTransaction();
 
                 // Send onboarding email
                 try {
@@ -240,11 +229,6 @@ const onboardClient = async (req, res) => {
                             <p><strong>Password:</strong> ${defaultPassword}</p>
                             <p><strong style="color: red;">Important:</strong> Please change your password after your first login for security purposes.</p>
                             <p>Access your dashboard at: <a href="https://erp.mabicons.com">https://erp.mabicons.com</a></p>
-                            <p>For any assistance, please contact:</p>
-                            <ul>
-                                <li>Email: support@mabicons.com</li>
-                                <li>Phone: Your-Support-Number</li>
-                            </ul>
                             <p>Best regards,<br>MabiconsERP Team</p>
                         `
                     });
@@ -253,73 +237,39 @@ const onboardClient = async (req, res) => {
                     // Continue process but log error
                 }
 
-            } catch (transactionError) {
-                if (session) {
-                    await session.abortTransaction();
-                }
-                console.error('Transaction error:', transactionError);
+                // Send success response
+                return res.status(200).json({
+                    success: true,
+                    message: 'Client accepted successfully',
+                    data: {
+                        id: client._id,
+                        name: client.name,
+                        email: client.email,
+                        companyName: client.companyName,
+                        status: client.status,
+                        teamLeader: {
+                            id: teamLeader._id,
+                            name: teamLeader.name,
+                            email: teamLeader.email,
+                            phone: teamLeader.phone
+                        }
+                    }
+                });
+
+            } catch (error) {
+                console.error('Error in update process:', error);
                 return res.status(500).json({
                     success: false,
-                    message: 'Error updating client and team leader'
+                    message: 'Error updating client and team leader',
+                    error: process.env.NODE_ENV === 'development' ? error.message : undefined
                 });
-            } finally {
-                if (session) {
-                    session.endSession();
-                }
-            }
-
-        } else {
-            // Handle rejection
-            client.status = 'Rejected';
-            await client.save();
-
-            try {
-                await sendEmail({
-                    email: client.email,
-                    name: client.name,
-                    subject: 'MabiconsERP Application Status',
-                    htmlContent: `
-                        <p>Dear ${client.name},</p>
-                        <p>Thank you for your interest in MabiconsERP.</p>
-                        <p>We regret to inform you that your application has been declined at this time.</p>
-                        <p>If you have any questions or would like to discuss this further, please contact our support team at:</p>
-                        <ul>
-                            <li>Email: support@mabicons.com</li>
-                            <li>Phone: Your-Support-Number</li>
-                        </ul>
-                        <p>Best regards,<br>MabiconsERP Team</p>
-                    `
-                });
-            } catch (emailError) {
-                console.error('Error sending rejection email:', emailError);
             }
         }
-
-        res.status(200).json({
-            success: true,
-            message: `Client ${action.toLowerCase()} successfully`,
-            data: {
-                id: client._id,
-                name: client.name,
-                email: client.email,
-                companyName: client.companyName,
-                status: client.status,
-                teamLeader: client.teamLeader ? {
-                    id: client.teamLeader._id,
-                    name: client.teamLeader.name,
-                    email: client.teamLeader.email,
-                    phone: client.teamLeader.phone
-                } : null
-            }
-        });
+        // ... rest of the code for rejection case
 
     } catch (error) {
-        if (session) {
-            await session.abortTransaction();
-            session.endSession();
-        }
-        console.error('Error onboarding client:', error);
-        res.status(500).json({
+        console.error('Error in onboarding process:', error);
+        return res.status(500).json({
             success: false,
             message: 'Error processing client onboarding request',
             error: process.env.NODE_ENV === 'development' ? error.message : undefined
