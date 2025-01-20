@@ -136,66 +136,95 @@ const loginClient = async (req, res) => {
 };
 
 const onboardClient = async (req, res) => {
+    let session;
     try {
         const { clientId, action, teamLeaderId } = req.body;
 
         // Validate required fields
         if (!clientId || !action || !['Accepted', 'Rejected'].includes(action)) {
-            return res.status(400).json({ message: 'Client ID and a valid action (Accepted or Rejected) are required.' });
+            return res.status(400).json({
+                success: false,
+                message: 'Client ID and a valid action (Accepted or Rejected) are required.'
+            });
         }
 
         // Validate MongoDB ObjectId format
         if (!mongoose.Types.ObjectId.isValid(clientId)) {
-            return res.status(400).json({ message: 'Invalid client ID format' });
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid client ID format'
+            });
         }
 
         // Find the client with populated teamLeader field
-        const client = await Client.findOne({ _id: clientId, status: 'Requested' })
+        const client = await Client.findOne({ _id: clientId })
             .populate('teamLeader');
 
         if (!client) {
-            return res.status(404).json({ message: 'Client not found or already processed' });
+            return res.status(404).json({
+                success: false,
+                message: 'Client not found'
+            });
+        }
+
+        // Check if client has already been processed
+        if (client.status !== 'Requested') {
+            return res.status(400).json({
+                success: false,
+                message: `Client has already been ${client.status.toLowerCase()}`
+            });
         }
 
         if (action === 'Accepted') {
             // Validate teamLeaderId
             if (!teamLeaderId || !mongoose.Types.ObjectId.isValid(teamLeaderId)) {
-                return res.status(400).json({ message: 'Valid Team Leader ID is required to accept the client.' });
+                return res.status(400).json({
+                    success: false,
+                    message: 'Valid Team Leader ID is required to accept the client.'
+                });
             }
 
             // Check if TeamLeader exists
             const teamLeader = await TeamLeader.findById(teamLeaderId);
             if (!teamLeader) {
-                return res.status(404).json({ message: 'Team Leader not found' });
+                return res.status(404).json({
+                    success: false,
+                    message: 'Team Leader not found'
+                });
             }
 
             // Check if client is already assigned to a team leader
             if (client.teamLeader) {
-                return res.status(400).json({ message: 'Client is already assigned to a team leader' });
+                return res.status(400).json({
+                    success: false,
+                    message: 'Client is already assigned to a team leader'
+                });
             }
 
             // Generate default password
-            const defaultPassword = `${client.companyName}@123`;
+            const defaultPassword = `${client.companyName.replace(/\s+/g, '')}@123`; // Remove spaces from company name
             const hashedPassword = await hashPassword(defaultPassword);
 
             try {
-                // Use transaction for atomic operations
-                const session = await mongoose.startSession();
-                await session.withTransaction(async () => {
-                    // Update client
-                    client.status = 'Accepted';
-                    client.teamLeader = teamLeaderId;
-                    client.password = hashedPassword;
-                    await client.save({ session });
+                // Start transaction
+                session = await mongoose.startSession();
+                session.startTransaction();
 
-                    // Update TeamLeader
-                    await TeamLeader.findByIdAndUpdate(
-                        teamLeaderId,
-                        { $addToSet: { clients: clientId } },
-                        { session, new: true }
-                    );
-                });
-                session.endSession();
+                // Update client
+                client.status = 'Accepted';
+                client.teamLeader = teamLeaderId;
+                client.password = hashedPassword;
+                await client.save({ session });
+
+                // Update TeamLeader
+                await TeamLeader.findByIdAndUpdate(
+                    teamLeaderId,
+                    { $addToSet: { clients: clientId } },
+                    { session, new: true }
+                );
+
+                // Commit transaction
+                await session.commitTransaction();
 
                 // Send onboarding email
                 try {
@@ -208,21 +237,35 @@ const onboardClient = async (req, res) => {
                             <p>Dear ${client.name},</p>
                             <p>Your account has been successfully activated. You can now login to your dashboard using the following credentials:</p>
                             <p><strong>Email:</strong> ${client.email}</p>
-                            <p><strong>Default Password:</strong> ${defaultPassword}</p>
-                            <p>For security reasons, we recommend changing your password after your first login.</p>
-                            <p>You can access your dashboard at: <a href="https://erp.mabicons.com">https://erp.mabicons.com</a></p>
-                            <p>If you have any questions or need assistance, please don't hesitate to contact our support team.</p>
+                            <p><strong>Password:</strong> ${defaultPassword}</p>
+                            <p><strong style="color: red;">Important:</strong> Please change your password after your first login for security purposes.</p>
+                            <p>Access your dashboard at: <a href="https://erp.mabicons.com">https://erp.mabicons.com</a></p>
+                            <p>For any assistance, please contact:</p>
+                            <ul>
+                                <li>Email: support@mabicons.com</li>
+                                <li>Phone: Your-Support-Number</li>
+                            </ul>
                             <p>Best regards,<br>MabiconsERP Team</p>
                         `
                     });
                 } catch (emailError) {
                     console.error('Error sending onboarding email:', emailError);
-                    // Log email error but continue with the process
+                    // Continue process but log error
                 }
 
             } catch (transactionError) {
+                if (session) {
+                    await session.abortTransaction();
+                }
                 console.error('Transaction error:', transactionError);
-                return res.status(500).json({ message: 'Error updating client and team leader' });
+                return res.status(500).json({
+                    success: false,
+                    message: 'Error updating client and team leader'
+                });
+            } finally {
+                if (session) {
+                    session.endSession();
+                }
             }
 
         } else {
@@ -237,8 +280,13 @@ const onboardClient = async (req, res) => {
                     subject: 'MabiconsERP Application Status',
                     htmlContent: `
                         <p>Dear ${client.name},</p>
-                        <p>We regret to inform you that your application for MabiconsERP has been declined at this time.</p>
-                        <p>If you have any questions, please contact our support team.</p>
+                        <p>Thank you for your interest in MabiconsERP.</p>
+                        <p>We regret to inform you that your application has been declined at this time.</p>
+                        <p>If you have any questions or would like to discuss this further, please contact our support team at:</p>
+                        <ul>
+                            <li>Email: support@mabicons.com</li>
+                            <li>Phone: Your-Support-Number</li>
+                        </ul>
                         <p>Best regards,<br>MabiconsERP Team</p>
                     `
                 });
@@ -248,24 +296,32 @@ const onboardClient = async (req, res) => {
         }
 
         res.status(200).json({
+            success: true,
             message: `Client ${action.toLowerCase()} successfully`,
-            client: {
+            data: {
                 id: client._id,
                 name: client.name,
                 email: client.email,
+                companyName: client.companyName,
                 status: client.status,
                 teamLeader: client.teamLeader ? {
                     id: client.teamLeader._id,
                     name: client.teamLeader.name,
-                    email: client.teamLeader.email
+                    email: client.teamLeader.email,
+                    phone: client.teamLeader.phone
                 } : null
             }
         });
 
     } catch (error) {
+        if (session) {
+            await session.abortTransaction();
+            session.endSession();
+        }
         console.error('Error onboarding client:', error);
         res.status(500).json({
-            message: 'Server error',
+            success: false,
+            message: 'Error processing client onboarding request',
             error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }

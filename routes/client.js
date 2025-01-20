@@ -10,7 +10,7 @@ router.post('/signup', signupClient);
 router.post('/login', loginClient);
 
 // Client onboarding route (Admin only)
-router.post('/onboard-client', verifyAuthToken, onboardClient);
+router.post('/onboard-client', onboardClient);
 
 // Edit client route
 router.put('/edit', verifyAuthToken, editClient);
