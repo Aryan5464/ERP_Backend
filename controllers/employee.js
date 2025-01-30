@@ -77,7 +77,7 @@ const createEmployee = async (req, res) => {
         });
     } catch (error) {
         console.error('Error creating Employee:', error);
-        res.status(500).json({ message: 'Server error' });
+        res.status(500).json({ message: 'Server error'});
     }
 };
 
